@@ -2581,6 +2581,7 @@ bool ProcessMessages(CNode* pfrom)
 bool SendMessages(CNode* pto, bool fSendTrickle)
 {
     CRITICAL_BLOCK(cs_main)
+    CRITICAL_BLOCK(pto->cs_vSend)
     {
         // Don't send anything until we get their version message
         if (pto->nVersion == 0)

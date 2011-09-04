@@ -693,6 +693,9 @@ void ThreadSocketHandler2(void* parg)
         if(hListenSocket != INVALID_SOCKET)
             FD_SET(hListenSocket, &fdsetRecv);
         hSocketMax = max(hSocketMax, hListenSocket);
+
+        vector<CNode*> vpnodeToCheck;
+
         CRITICAL_BLOCK(cs_vNodes)
         {
             BOOST_FOREACH(CNode* pnode, vNodes)
@@ -702,10 +705,16 @@ void ThreadSocketHandler2(void* parg)
                 FD_SET(pnode->hSocket, &fdsetRecv);
                 FD_SET(pnode->hSocket, &fdsetError);
                 hSocketMax = max(hSocketMax, pnode->hSocket);
-                TRY_CRITICAL_BLOCK(pnode->cs_vSend)
-                    if (!pnode->vSend.empty())
-                        FD_SET(pnode->hSocket, &fdsetSend);
+                vpnodeToCheck.push_back(pnode->AddRef());
             }
+        }
+
+        BOOST_FOREACH(CNode* pnode, vpnodeToCheck)
+        {
+            TRY_CRITICAL_BLOCK(pnode->cs_vSend)
+                if (!pnode->vSend.empty())
+                    FD_SET(pnode->hSocket, &fdsetSend);
+            pnode->Release();
         }
 
         vnThreadsRunning[0]--;
@@ -1434,8 +1443,8 @@ void ThreadMessageHandler2(void* parg)
                 return;
 
             // Send messages
-            TRY_CRITICAL_BLOCK(pnode->cs_vSend)
-                SendMessages(pnode, pnode == pnodeTrickle);
+            SendMessages(pnode, pnode == pnodeTrickle);
+
             if (fShutdown)
                 return;
         }
