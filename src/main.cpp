@@ -3494,13 +3494,13 @@ void DumpCompressed(void)
         // block time (10.6 bit per block)
         int low = pindex->pprev->GetMedianTimePast() - pindex->pprev->nTime;
         int timediff = pindex->nTime - pindex->pprev->nTime; 
-        symb_put_int_limited(&c, &ctx.blk_time, timediff, low, 500000, NULL);
+        symb_put_int_limited(&c, &ctx.blk_time, timediff, low, 500000);
 
         // nonce (31.2 bit per block)
         unsigned char nonce_low = pindex->nNonce & 0xFF;
         symb_write_raw(&c, &nonce_low, 1);
         int nonce_high = pindex->nNonce >> 8;
-        symb_put_int_limited(&c, &ctx.nonce_high, nonce_high, 0, 0xFFFFFF, NULL);
+        symb_put_int_limited(&c, &ctx.nonce_high, nonce_high, 0, 0xFFFFFF);
 
         CBlock block;
         if (!block.ReadFromDisk(pindex, true))
@@ -3510,11 +3510,11 @@ void DumpCompressed(void)
 
         // tx count (2.53 bit per block)
         int ntx = (int)(block.vtx.size()) - 1;
-        symb_put_int_limited(&c, &ctx.vtxcount, ntx, 0, (MAX_BLOCK_SIZE - 80 - 61)/59, NULL);
+        symb_put_int_limited(&c, &ctx.vtxcount, ntx, 0, (MAX_BLOCK_SIZE - 80 - 61)/59);
 
         // coinbase
         int coinbase_len = block.vtx[0].vin[0].scriptSig.size();
-        symb_put_int_limited(&c, &ctx.coinbase_len, coinbase_len, 2, 100, NULL);
+        symb_put_int_limited(&c, &ctx.coinbase_len, coinbase_len, 2, 100);
         symb_write_raw(&c, &block.vtx[0].vin[0].scriptSig[0], block.vtx[0].vin[0].scriptSig.size());
         nBytesCoinbase += block.vtx[0].vin[0].scriptSig.size();
 
@@ -3527,7 +3527,7 @@ void DumpCompressed(void)
             // tx inputs (skip coinbase tx)
             if (i!=0)
             {
-                symb_put_int_limited(&c, &ctx.txincount, tx.vin.size()-1, 0, (MAX_BLOCK_SIZE-59)/41, NULL);
+                symb_put_int_limited(&c, &ctx.txincount, tx.vin.size()-1, 0, (MAX_BLOCK_SIZE-59)/41);
                 for (int j=0; j<tx.vin.size(); j++)
                 {
                     const CTxIn &txin = tx.vin[j];
@@ -3537,7 +3537,7 @@ void DumpCompressed(void)
 
                     // block reference
                     int nBlocksBack = pindex->nHeight - txinfo.nHeight;
-                    symb_put_int_limited(&c, &ctx.blockref, nBlocksBack, 0, pindex->nHeight, NULL);
+                    symb_put_int_limited(&c, &ctx.blockref, nBlocksBack, 0, pindex->nHeight);
 
                     // tx reference
                     int nUnspentTxPos = 0, nUnspentTxCount = 0;
@@ -3547,7 +3547,7 @@ void DumpCompressed(void)
                             if (k<txinfo.nBlockPos) nUnspentTxPos++;
                             nUnspentTxCount++;
                         }
-                    symb_put_int_limited(&c, &ctx.txref, nUnspentTxPos, 0, nUnspentTxCount-1, NULL);
+                    symb_put_int_limited(&c, &ctx.txref, nUnspentTxPos, 0, nUnspentTxCount-1);
 
                     // txout reference
                     int nUnspentTxoutPos = 0, nUnspentTxoutCount = 0;
@@ -3557,10 +3557,10 @@ void DumpCompressed(void)
                              if (k<txin.prevout.n) nUnspentTxoutPos++;
                              nUnspentTxoutCount++;
                          }
-                    symb_put_int_limited(&c, &ctx.txoutref, nUnspentTxoutPos, 0, nUnspentTxoutCount-1, NULL);
+                    symb_put_int_limited(&c, &ctx.txoutref, nUnspentTxoutPos, 0, nUnspentTxoutCount-1);
 
                     // scriptSig
-                    symb_put_int_limited(&c, &ctx.txinScriptSize, txin.scriptSig.size(), 0, MAX_BLOCK_SIZE, NULL);
+                    symb_put_int_limited(&c, &ctx.txinScriptSize, txin.scriptSig.size(), 0, MAX_BLOCK_SIZE);
                     symb_write_raw(&c, &txin.scriptSig[0], txin.scriptSig.size());
                     nBytesScriptSig += txin.scriptSig.size();
 
@@ -3584,16 +3584,16 @@ void DumpCompressed(void)
             txinfo.vfSpent.resize(tx.vout.size());
 
             // tx outputs
-            symb_put_int_limited(&c, &ctx.txoutcount, tx.vout.size()-1, 0, (MAX_BLOCK_SIZE-59)/8, NULL);
+            symb_put_int_limited(&c, &ctx.txoutcount, tx.vout.size()-1, 0, (MAX_BLOCK_SIZE-59)/8);
             for (int j=0; j<tx.vout.size(); j++)
             {
                 const CTxOut &txout = tx.vout[j];
                 nTxOut++;
-                symb_put_int_limited(&c, &ctx.amount[0], txout.nValue % 10000, 0, 9999, NULL);
-                symb_put_int_limited(&c, &ctx.amount[1], (txout.nValue / 10000) % 10000, 0, 9999, NULL);
-                symb_put_int_limited(&c, &ctx.amount[2], (txout.nValue / 100000000) % 10000, 0, 9999, NULL);
-                symb_put_int_limited(&c, &ctx.amount[3], txout.nValue / 1000000000000, 0, 209, NULL);
-                symb_put_int_limited(&c, &ctx.txoutScriptSize, txout.scriptPubKey.size(), 0, MAX_BLOCK_SIZE, NULL);
+                symb_put_int_limited(&c, &ctx.amount[0], txout.nValue % 10000, 0, 9999);
+                symb_put_int_limited(&c, &ctx.amount[1], (txout.nValue / 10000) % 10000, 0, 9999);
+                symb_put_int_limited(&c, &ctx.amount[2], (txout.nValue / 100000000) % 10000, 0, 9999);
+                symb_put_int_limited(&c, &ctx.amount[3], txout.nValue / 1000000000000, 0, 209);
+                symb_put_int_limited(&c, &ctx.txoutScriptSize, txout.scriptPubKey.size(), 0, MAX_BLOCK_SIZE);
                 symb_write_raw(&c, &txout.scriptPubKey[0], txout.scriptPubKey.size());
                 nBytesScriptPubkey += txout.scriptPubKey.size();
             }
@@ -3606,4 +3606,32 @@ void DumpCompressed(void)
    symb_flush(&c);
    fclose(file);
    printf("Dumped chain: %llu bytes coinbase, %llu bytes scriptSig, %llu bytes scriptPubKey\n", (unsigned long long)nBytesCoinbase, (unsigned long long)nBytesScriptSig, (unsigned long long)nBytesScriptPubkey);
+   uint64_t nTotalBlock = ctx.blk_time.nSize + ctx.nonce_high.nSize + ctx.vtxcount.nSize + ctx.coinbase_len.nSize;
+   uint64_t nTotalTx = ctx.txincount.nSize + ctx.txoutcount.nSize;
+   uint64_t nTotalTxIn = ctx.blockref.nSize + ctx.txref.nSize + ctx.txoutref.nSize + ctx.txinScriptSize.nSize;
+   uint64_t nTotalTxOut = ctx.txoutScriptSize.nSize + ctx.amount[0].nSize + ctx.amount[1].nSize + ctx.amount[2].nSize + ctx.amount[3].nSize;
+   printf("* %7i blocks:    % 14.2f bytes\n", pindexBest->nHeight, nTotalBlock*log4k_base*0.125 + pindexBest->nHeight + nBytesCoinbase);
+   printf("  - block time:      % 14.2f bytes\n", ctx.blk_time.nSize*log4k_base*0.125);
+   printf("  - nonces:          % 14.2f bytes\n", ctx.nonce_high.nSize*log4k_base*0.125 + pindexBest->nHeight);
+   printf("  - #tx:             % 14.2f bytes\n", ctx.vtxcount.nSize*log4k_base*0.125);
+   printf("  - coinbase len:    % 14.2f bytes\n", ctx.coinbase_len.nSize*log4k_base*0.125);
+   printf("  - coinbase:        % 14.2f bytes\n", (double)nBytesCoinbase);
+   printf("* %7i txs        % 14.2f bytes\n", nTx, nTotalTx*log4k_base*0.125);
+   printf("  - #txin:           % 14.2f bytes\n", ctx.txincount.nSize*log4k_base*0.125);
+   printf("  - #txout:          % 14.2f bytes\n", ctx.txoutcount.nSize*log4k_base*0.125);
+   printf("* %7i txins:     % 14.2f bytes\n", nTxIn, nTotalTxIn*log4k_base*0.125 + nBytesScriptSig);
+   printf("  - prevout:         % 14.2f bytes\n", (ctx.blockref.nSize+ctx.txref.nSize+ctx.txoutref.nSize)*log4k_base*0.125);
+   printf("    - block ref:     % 14.2f bytes\n", ctx.blockref.nSize*log4k_base*0.125);
+   printf("    - tx ref:        % 14.2f bytes\n", ctx.txref.nSize*log4k_base*0.125);
+   printf("    - txout ref:     % 14.2f bytes\n", ctx.txoutref.nSize*log4k_base*0.125);
+   printf("  - script len:      % 14.2f bytes\n", ctx.txinScriptSize.nSize*log4k_base*0.125);
+   printf("  - script           % 14.2f bytes\n", (double)nBytesScriptSig);
+   printf("* %7i txouts:    % 14.2f bytes\n", nTxOut, nTotalTxOut*log4k_base*0.125 + nBytesScriptPubkey);
+   printf("  - amount:          % 14.2f bytes\n", (ctx.amount[0].nSize + ctx.amount[1].nSize + ctx.amount[2].nSize + ctx.amount[3].nSize)*log4k_base*0.125);
+   printf("    - 1e-8 BTC:      % 14.2f bytes\n", ctx.amount[0].nSize*log4k_base*0.125);
+   printf("    - 1e-4 BTC:      % 14.2f bytes\n", ctx.amount[1].nSize*log4k_base*0.125);
+   printf("    -    1 BTC:      % 14.2f bytes\n", ctx.amount[2].nSize*log4k_base*0.125);
+   printf("    -  10k BTC:      % 14.2f bytes\n", ctx.amount[3].nSize*log4k_base*0.125);
+   printf("  - script len:      % 14.2f bytes\n", ctx.txoutScriptSize.nSize*log4k_base*0.125);
+   printf("  - script:          % 14.2f bytes\n", (double)nBytesScriptPubkey);
 }

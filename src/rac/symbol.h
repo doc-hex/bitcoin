@@ -70,6 +70,7 @@ typedef struct {
   chs_t chs_exp[SYMBOL_BITS-1];
   chs_t chs_sgn[SYMBOL_BITS];
   chs_t chs_mnt[SYMBOL_BITS-1];
+  uint64_t nSize;
 } symb_chs_t;
 
 typedef struct {
@@ -85,11 +86,11 @@ void symb_put_bit(symb_coder_t *c, chs_t *chs, int val, uint64_t *count);
 int symb_get_bit(symb_coder_t *c, chs_t *chs);
 void symb_write_raw(symb_coder_t *c, const void* data, size_t len);
 void symb_read_raw(symb_coder_t *c, void* data, size_t len);
-void symb_put_simple_bit(symb_coder_t *c, int val, uint64_t *count);
+void symb_put_simple_bit(symb_coder_t *c, int val);
 int symb_get_simple_bit(symb_coder_t *c);
-void symb_put_int(symb_coder_t *c, symb_chs_t *sc, int val, int min, int max, uint64_t *count);
+void symb_put_int(symb_coder_t *c, symb_chs_t *sc, int val, int min, int max);
 int symb_get_int(symb_coder_t *c, symb_chs_t *sc, int min, int max);
-void symb_put_int_limited(symb_coder_t *c, symb_chs_t *sc, int val, int min, int max, uint64_t *count);
+void symb_put_int_limited(symb_coder_t *c, symb_chs_t *sc, int val, int min, int max);
 int symb_get_int_limited(symb_coder_t *c, symb_chs_t *sc, int min, int max);
 void symb_flush(symb_coder_t *c);
 void symb_show_stats(FILE *f, symb_coder_t *c);

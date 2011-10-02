@@ -50,9 +50,8 @@ int inline symb_get_bit(symb_coder_t *c, chs_t *chs) {
   return val;
 }
 
-void inline symb_put_simple_bit(symb_coder_t *c, int val, uint64_t *count) {
+void inline symb_put_simple_bit(symb_coder_t *c, int val) {
   rac_put_bit_b16(&c->rac,0x8000,val);
-  if (count) (*count)++;
 //  fprintf(stderr,"symb_put_bit: %i with chance simple\n",val);
 }
 
@@ -98,6 +97,7 @@ void symb_chs_init(symb_chs_t *sc) {
     chs_init(&sc->chs_sgn[i], 0x800);
     chs_init(&sc->chs_mnt[i], 0x800);
   }
+  sc->nSize = 0;
 }
 
 static int nbytes = 0;
@@ -138,7 +138,7 @@ static int64_t nb_diffs = 0, tot_diffs = 0, tot_sq_diffs = 0;
  */
 
 
-inline void symb_put_int_limited(symb_coder_t *c, symb_chs_t *sc, int val, int min, int max, uint64_t *count) {
+inline void symb_put_int_limited(symb_coder_t *c, symb_chs_t *sc, int val, int min, int max) {
 //  fprintf(stderr,"jif_put_symb: %4i in [%4i..%4i]\n",val,min,max);
   // initialization
   assert(min<=max);
@@ -178,21 +178,21 @@ inline void symb_put_int_limited(symb_coder_t *c, symb_chs_t *sc, int val, int m
 
     // zeroness (chance state 0)
     if (amin == 0) { // zero is possible
-      symb_put_bit(c,&sc->chs_zero,0,count);
+      symb_put_bit(c,&sc->chs_zero,0,&sc->nSize);
     }
 
     // unary encoding of exponent (chance states 1..9)
     assert(e < SYMBOL_BITS);
     int i = bmin;
     while (i < e) {
-      symb_put_bit(c,&sc->chs_exp[i],1,count);
+      symb_put_bit(c,&sc->chs_exp[i],1,&sc->nSize);
       i++;
     }
-    if (e < bmax) symb_put_bit(c,&sc->chs_exp[i],0,count);
+    if (e < bmax) symb_put_bit(c,&sc->chs_exp[i],0,&sc->nSize);
 
     // sign (chance states 11..20)
     if (min<0 && max>0) {
-      symb_put_bit(c,&sc->chs_sgn[e],val < 0,count);
+      symb_put_bit(c,&sc->chs_sgn[e],val < 0,&sc->nSize);
     }
 
 
@@ -209,7 +209,7 @@ inline void symb_put_int_limited(symb_coder_t *c, symb_chs_t *sc, int val, int m
         symb_skip_bit(c,&sc->chs_mnt[i],1);
       } else { // both 0 and 1 are possible
         bit = (a >> i) & 1;
-        symb_put_bit(c,&sc->chs_mnt[i],bit,count);
+        symb_put_bit(c,&sc->chs_mnt[i],bit,&sc->nSize);
       }
       run |= (bit << i);
     }
@@ -217,15 +217,15 @@ inline void symb_put_int_limited(symb_coder_t *c, symb_chs_t *sc, int val, int m
 
 
   } else { // zero
-    symb_put_bit(c,&sc->chs_zero,1,count);
+    symb_put_bit(c,&sc->chs_zero,1,&sc->nSize);
   }
 
   assert(val>=min);
   assert(val<=max);
 }
 
-void symb_put_int(symb_coder_t *c, symb_chs_t *sc, int val, int min, int max, uint64_t *count) {
-   symb_put_int_limited(c,sc, val, min, max, count);
+void symb_put_int(symb_coder_t *c, symb_chs_t *sc, int val, int min, int max) {
+   symb_put_int_limited(c,sc, val, min, max);
 }
 
 // read in a whole symbol from the range encoder using exponent/mantissa/sign representation
