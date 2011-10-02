@@ -3430,7 +3430,24 @@ typedef struct {
   symb_chs_t blk_time;
   symb_chs_t nonce_high;
   symb_chs_t vtxcount;
+  symb_chs_t coinbase_len;
+  symb_chs_t txincount;
+  symb_chs_t txoutcount;
+  symb_chs_t blockref;
+  symb_chs_t txref;
+  symb_chs_t txoutref;
+  symb_chs_t txinScriptSize;
+  symb_chs_t txoutScriptSize;
+  symb_chs_t amount[4]; // 4 digits each
 } blkctx_t;
+
+class CTxInfo
+{
+public:
+    int nHeight;
+    int nBlockPos;
+    int nTxOuts;
+};
 
 void DumpCompressed(void)
 {
@@ -3444,47 +3461,100 @@ void DumpCompressed(void)
     symb_chs_init(&ctx.blk_time);
     symb_chs_init(&ctx.nonce_high);
     symb_chs_init(&ctx.vtxcount);
+    symb_chs_init(&ctx.coinbase_len);
+    symb_chs_init(&ctx.txincount);
+    symb_chs_init(&ctx.txoutcount);
+    symb_chs_init(&ctx.blockref);
+    symb_chs_init(&ctx.txref);
+    symb_chs_init(&ctx.txoutref);
+    symb_chs_init(&ctx.txinScriptSize);
+    symb_chs_init(&ctx.txoutScriptSize);
+    symb_chs_init(&ctx.amount[0]);
+    symb_chs_init(&ctx.amount[1]);
+    symb_chs_init(&ctx.amount[3]);
+    symb_chs_init(&ctx.amount[4]);
 
     CBlockIndex *pindex = pindexGenesisBlock;
     CTxDB txdb("r");
-    unsigned int prevtime = pindex->nTime;
     pindex = pindex->pnext;
 
+    int nTx=0, nTxIn=0, nTxOut=0;
+
+    map<int, int> mapBlockTxCount; // blockheight -> vtx.size()
+    map<uint256, CTxInfo> mapTxIndex; // txid -> txinfo
+
     do {
+        // block time (10.6 bit per block)
+        int low = pindex->pprev->GetMedianTimePast() - pindex->pprev->nTime;
+        int timediff = pindex->nTime - pindex->pprev->nTime; 
+        symb_put_int_limited(&c, &ctx.blk_time, timediff, low, 500000, NULL);
 
-        // block time
-        int timediff = pindex->nTime - prevtime; 
-        prevtime = pindex->nTime;
-        symb_put_int_limited(&c, &ctx.blk_time, timediff, -86400, 1000000, NULL);
-
-        // nonce
-/*        unsigned char nonce_low = pindex->nNonce & 0xFF;
+        // nonce (31.2 bit per block)
+        unsigned char nonce_low = pindex->nNonce & 0xFF;
         symb_write_raw(&c, &nonce_low, 1);
         int nonce_high = pindex->nNonce >> 8;
-        symb_put_int_limited(&c, &ctx.nonce_high, nonce_high, 0, 0xFFFFFF, NULL); */
+        symb_put_int_limited(&c, &ctx.nonce_high, nonce_high, 0, 0xFFFFFF, NULL);
 
         CBlock block;
-        block.ReadFromDisk(pindex, true);
+        if (!block.ReadFromDisk(pindex, true))
+            printf("DUMP ERROR: can't read block\n");
 
-        // tx count
-/*        int ntx = (int)(block.vtx.size());
-        symb_put_int_limited(&c, &ctx.vtxcount, ntx, 1, 65535, NULL); */
+        mapBlockTxCount[pindex->nHeight] = block.vtx.size();
 
-/*        for (int i=0; i<block.vtx.size(); i++) {
+        // tx count (2.53 bit per block)
+        int ntx = (int)(block.vtx.size()) - 1;
+        symb_put_int_limited(&c, &ctx.vtxcount, ntx, 0, (MAX_BLOCK_SIZE - 80 - 61)/59, NULL);
+
+        // coinbase
+        int coinbase_len = block.vtx[0].vin[0].scriptSig.size();
+        symb_put_int_limited(&c, &ctx.coinbase_len, coinbase_len, 2, 100, NULL);
+        symb_write_raw(&c, &block.vtx[0].vin[0].scriptSig[0], block.vtx[0].vin[0].scriptSig.size());
+
+        // transactions
+        for (int i=0; i<block.vtx.size(); i++)
+        {
             const CTransaction &tx = block.vtx[i];
-            uint256 hash = tx.GetHash();
-            int nSpent = 0;
-            CTxIndex txi;
-            if (txdb.ReadTxIndex(tx.GetHash(), txi)) {
-                for (int j=0; j<tx.vout.size(); j++) {
-                    if (!txi.vSpent[j].IsNull())
-                        nSpent++;
+            CTxInfo &txinfo = mapTxIndex[tx.GetHash()];
+            txinfo.nHeight = pindex->nHeight;
+            txinfo.nBlockPos = i;
+            txinfo.nTxOuts = tx.vout.size();
+            nTx++;
+
+            // tx inputs (skip coinbase tx)
+            if (i!=0)
+            {
+                symb_put_int_limited(&c, &ctx.txincount, tx.vin.size()-1, 0, (MAX_BLOCK_SIZE-59)/41, NULL);
+                for (int j=0; j<tx.vin.size(); j++)
+                {
+                    const CTxIn &txin = tx.vin[j];
+                    nTxIn++;
+                    CTxInfo &txinfo = mapTxIndex[txin.prevout.hash];
+                    int nTotalTx = mapBlockTxCount[txinfo.nHeight];
+                    int nBlocksBack = pindex->nHeight - txinfo.nHeight;
+                    symb_put_int_limited(&c, &ctx.blockref, nBlocksBack, 0, pindex->nHeight, NULL);
+                    symb_put_int_limited(&c, &ctx.txref, txinfo.nBlockPos, 0, nTotalTx-1, NULL);
+                    symb_put_int_limited(&c, &ctx.txoutref, txin.prevout.n, 0, txinfo.nTxOuts, NULL);
+                    symb_put_int_limited(&c, &ctx.txinScriptSize, txin.scriptSig.size(), 0, MAX_BLOCK_SIZE, NULL);
+                    symb_write_raw(&c, &txin.scriptSig[0], txin.scriptSig.size());
                 }
             }
-            of << pindex->nHeight << " " << HexStr(hash.begin(), hash.end()) << " " << tx.vout.size() << " " << (tx.vout.size() - nSpent) << endl;
-        } */
 
-        printf("Dumped block %i\n", pindex->nHeight);
+            // tx outputs
+            symb_put_int_limited(&c, &ctx.txoutcount, tx.vout.size()-1, 0, (MAX_BLOCK_SIZE-59)/8, NULL);
+            for (int j=0; j<tx.vout.size(); j++)
+            {
+                const CTxOut &txout = tx.vout[j];
+                nTxOut++;
+                symb_put_int_limited(&c, &ctx.amount[0], txout.nValue % 10000, 0, 9999, NULL);
+                symb_put_int_limited(&c, &ctx.amount[0], (txout.nValue / 10000) % 10000, 0, 9999, NULL);
+                symb_put_int_limited(&c, &ctx.amount[0], (txout.nValue / 100000000) % 10000, 0, 9999, NULL);
+                symb_put_int_limited(&c, &ctx.amount[0], txout.nValue / 1000000000000, 0, 209, NULL);
+                symb_put_int_limited(&c, &ctx.txoutScriptSize, txout.scriptPubKey.size(), 0, MAX_BLOCK_SIZE, NULL);
+                symb_write_raw(&c, &txout.scriptPubKey[0], txout.scriptPubKey.size());
+            }
+        }
+
+        printf("Dumped block %i (%i txs, %i txouts, %i txins)\n", pindex->nHeight, nTx, nTxOut, nTxIn);
         pindex = pindex->pnext;
     } while(pindex);
 
