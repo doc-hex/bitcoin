@@ -3441,12 +3441,18 @@ typedef struct {
   symb_chs_t amount[4]; // 4 digits each
 } blkctx_t;
 
+class CBlockInfo
+{
+public:
+    vector<bool> vfTxSpent;
+};
+
 class CTxInfo
 {
 public:
     int nHeight;
     int nBlockPos;
-    int nTxOuts;
+    vector<bool> vfSpent;
 };
 
 void DumpCompressed(void)
@@ -3471,16 +3477,17 @@ void DumpCompressed(void)
     symb_chs_init(&ctx.txoutScriptSize);
     symb_chs_init(&ctx.amount[0]);
     symb_chs_init(&ctx.amount[1]);
+    symb_chs_init(&ctx.amount[2]);
     symb_chs_init(&ctx.amount[3]);
-    symb_chs_init(&ctx.amount[4]);
 
     CBlockIndex *pindex = pindexGenesisBlock;
     CTxDB txdb("r");
     pindex = pindex->pnext;
 
     int nTx=0, nTxIn=0, nTxOut=0;
+    uint64_t nBytesCoinbase = 0, nBytesScriptPubkey = 0, nBytesScriptSig = 0;
 
-    map<int, int> mapBlockTxCount; // blockheight -> vtx.size()
+    map<int, CBlockInfo> mapBlockTxCount; // blockheight -> vtx.size()
     map<uint256, CTxInfo> mapTxIndex; // txid -> txinfo
 
     do {
@@ -3499,7 +3506,7 @@ void DumpCompressed(void)
         if (!block.ReadFromDisk(pindex, true))
             printf("DUMP ERROR: can't read block\n");
 
-        mapBlockTxCount[pindex->nHeight] = block.vtx.size();
+        mapBlockTxCount[pindex->nHeight].vfTxSpent.resize(block.vtx.size());
 
         // tx count (2.53 bit per block)
         int ntx = (int)(block.vtx.size()) - 1;
@@ -3509,15 +3516,12 @@ void DumpCompressed(void)
         int coinbase_len = block.vtx[0].vin[0].scriptSig.size();
         symb_put_int_limited(&c, &ctx.coinbase_len, coinbase_len, 2, 100, NULL);
         symb_write_raw(&c, &block.vtx[0].vin[0].scriptSig[0], block.vtx[0].vin[0].scriptSig.size());
+        nBytesCoinbase += block.vtx[0].vin[0].scriptSig.size();
 
         // transactions
         for (int i=0; i<block.vtx.size(); i++)
         {
             const CTransaction &tx = block.vtx[i];
-            CTxInfo &txinfo = mapTxIndex[tx.GetHash()];
-            txinfo.nHeight = pindex->nHeight;
-            txinfo.nBlockPos = i;
-            txinfo.nTxOuts = tx.vout.size();
             nTx++;
 
             // tx inputs (skip coinbase tx)
@@ -3529,15 +3533,55 @@ void DumpCompressed(void)
                     const CTxIn &txin = tx.vin[j];
                     nTxIn++;
                     CTxInfo &txinfo = mapTxIndex[txin.prevout.hash];
-                    int nTotalTx = mapBlockTxCount[txinfo.nHeight];
+                    CBlockInfo &blockinfo = mapBlockTxCount[txinfo.nHeight];
+
+                    // block reference
                     int nBlocksBack = pindex->nHeight - txinfo.nHeight;
                     symb_put_int_limited(&c, &ctx.blockref, nBlocksBack, 0, pindex->nHeight, NULL);
-                    symb_put_int_limited(&c, &ctx.txref, txinfo.nBlockPos, 0, nTotalTx-1, NULL);
-                    symb_put_int_limited(&c, &ctx.txoutref, txin.prevout.n, 0, txinfo.nTxOuts, NULL);
+
+                    // tx reference
+                    int nUnspentTxPos = 0, nUnspentTxCount = 0;
+                    for (int k=0; k<blockinfo.vfTxSpent.size(); k++)
+                        if (blockinfo.vfTxSpent[k] == 0)
+                        {
+                            if (k<txinfo.nBlockPos) nUnspentTxPos++;
+                            nUnspentTxCount++;
+                        }
+                    symb_put_int_limited(&c, &ctx.txref, nUnspentTxPos, 0, nUnspentTxCount-1, NULL);
+
+                    // txout reference
+                    int nUnspentTxoutPos = 0, nUnspentTxoutCount = 0;
+                    for (int k=0; k<txinfo.vfSpent.size(); k++)
+                         if (txinfo.vfSpent[k] == 0)
+                         {
+                             if (k<txin.prevout.n) nUnspentTxoutPos++;
+                             nUnspentTxoutCount++;
+                         }
+                    symb_put_int_limited(&c, &ctx.txoutref, nUnspentTxoutPos, 0, nUnspentTxoutCount-1, NULL);
+
+                    // scriptSig
                     symb_put_int_limited(&c, &ctx.txinScriptSize, txin.scriptSig.size(), 0, MAX_BLOCK_SIZE, NULL);
                     symb_write_raw(&c, &txin.scriptSig[0], txin.scriptSig.size());
+                    nBytesScriptSig += txin.scriptSig.size();
+
+                    // mark prevout spent
+                    txinfo.vfSpent[txin.prevout.n] = 1;
+                    int allSpent = 1;
+                    BOOST_FOREACH(bool f, txinfo.vfSpent)
+                        if (!f) allSpent = 0;
+                    if (allSpent)
+                    {
+                        mapTxIndex.erase(txin.prevout.hash);
+                        blockinfo.vfTxSpent[txinfo.nBlockPos] = 1;
+                    }
                 }
             }
+
+            // mark outputs created
+            CTxInfo &txinfo = mapTxIndex[tx.GetHash()];
+            txinfo.nHeight = pindex->nHeight;
+            txinfo.nBlockPos = i;
+            txinfo.vfSpent.resize(tx.vout.size());
 
             // tx outputs
             symb_put_int_limited(&c, &ctx.txoutcount, tx.vout.size()-1, 0, (MAX_BLOCK_SIZE-59)/8, NULL);
@@ -3546,11 +3590,12 @@ void DumpCompressed(void)
                 const CTxOut &txout = tx.vout[j];
                 nTxOut++;
                 symb_put_int_limited(&c, &ctx.amount[0], txout.nValue % 10000, 0, 9999, NULL);
-                symb_put_int_limited(&c, &ctx.amount[0], (txout.nValue / 10000) % 10000, 0, 9999, NULL);
-                symb_put_int_limited(&c, &ctx.amount[0], (txout.nValue / 100000000) % 10000, 0, 9999, NULL);
-                symb_put_int_limited(&c, &ctx.amount[0], txout.nValue / 1000000000000, 0, 209, NULL);
+                symb_put_int_limited(&c, &ctx.amount[1], (txout.nValue / 10000) % 10000, 0, 9999, NULL);
+                symb_put_int_limited(&c, &ctx.amount[2], (txout.nValue / 100000000) % 10000, 0, 9999, NULL);
+                symb_put_int_limited(&c, &ctx.amount[3], txout.nValue / 1000000000000, 0, 209, NULL);
                 symb_put_int_limited(&c, &ctx.txoutScriptSize, txout.scriptPubKey.size(), 0, MAX_BLOCK_SIZE, NULL);
                 symb_write_raw(&c, &txout.scriptPubKey[0], txout.scriptPubKey.size());
+                nBytesScriptPubkey += txout.scriptPubKey.size();
             }
         }
 
@@ -3560,4 +3605,5 @@ void DumpCompressed(void)
 
    symb_flush(&c);
    fclose(file);
+   printf("Dumped chain: %llu bytes coinbase, %llu bytes scriptSig, %llu bytes scriptPubKey\n", (unsigned long long)nBytesCoinbase, (unsigned long long)nBytesScriptSig, (unsigned long long)nBytesScriptPubkey);
 }
