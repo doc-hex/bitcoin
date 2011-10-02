@@ -11,6 +11,11 @@
 #include <boost/filesystem.hpp>
 #include <boost/filesystem/fstream.hpp>
 
+extern "C"
+{
+#include "rac/symbol.h"
+}
+
 using namespace std;
 using namespace boost;
 
@@ -3419,4 +3424,70 @@ void GenerateBitcoins(bool fGenerate, CWallet* pwallet)
             Sleep(10);
         }
     }
+}
+
+typedef struct {
+  symb_chs_t blk_time;
+  symb_chs_t nonce_high;
+  symb_chs_t vtxcount;
+} blkctx_t;
+
+void DumpCompressed(void)
+{
+    symb_coder_t c;
+    FILE *file = fopen("blkchain.rac","w");
+    symb_init_write(&c, file, 8);
+    unsigned char bla[] = "BITCOIN";
+    symb_write_raw(&c, bla, 8);
+
+    blkctx_t ctx;
+    symb_chs_init(&ctx.blk_time);
+    symb_chs_init(&ctx.nonce_high);
+    symb_chs_init(&ctx.vtxcount);
+
+    CBlockIndex *pindex = pindexGenesisBlock;
+    CTxDB txdb("r");
+    unsigned int prevtime = pindex->nTime;
+    pindex = pindex->pnext;
+
+    do {
+
+        // block time
+        int timediff = pindex->nTime - prevtime; 
+        prevtime = pindex->nTime;
+        symb_put_int_limited(&c, &ctx.blk_time, timediff, -86400, 1000000, NULL);
+
+        // nonce
+/*        unsigned char nonce_low = pindex->nNonce & 0xFF;
+        symb_write_raw(&c, &nonce_low, 1);
+        int nonce_high = pindex->nNonce >> 8;
+        symb_put_int_limited(&c, &ctx.nonce_high, nonce_high, 0, 0xFFFFFF, NULL); */
+
+        CBlock block;
+        block.ReadFromDisk(pindex, true);
+
+        // tx count
+/*        int ntx = (int)(block.vtx.size());
+        symb_put_int_limited(&c, &ctx.vtxcount, ntx, 1, 65535, NULL); */
+
+/*        for (int i=0; i<block.vtx.size(); i++) {
+            const CTransaction &tx = block.vtx[i];
+            uint256 hash = tx.GetHash();
+            int nSpent = 0;
+            CTxIndex txi;
+            if (txdb.ReadTxIndex(tx.GetHash(), txi)) {
+                for (int j=0; j<tx.vout.size(); j++) {
+                    if (!txi.vSpent[j].IsNull())
+                        nSpent++;
+                }
+            }
+            of << pindex->nHeight << " " << HexStr(hash.begin(), hash.end()) << " " << tx.vout.size() << " " << (tx.vout.size() - nSpent) << endl;
+        } */
+
+        printf("Dumped block %i\n", pindex->nHeight);
+        pindex = pindex->pnext;
+    } while(pindex);
+
+   symb_flush(&c);
+   fclose(file);
 }

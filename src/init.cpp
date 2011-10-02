@@ -352,6 +352,8 @@ bool AppInit2(int argc, char* argv[])
         strErrors << _("Error loading blkindex.dat") << "\n";
     printf(" block index %15"PRI64d"ms\n", GetTimeMillis() - nStart);
 
+    DumpCompressed();
+
     InitMessage(_("Loading wallet..."));
     printf("Loading wallet...\n");
     nStart = GetTimeMillis();
