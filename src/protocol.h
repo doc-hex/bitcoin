@@ -95,7 +95,7 @@ class CAddress : public CService
         unsigned int nTime;
 
         // memory only
-        unsigned int nLastTry;
+        int64 nLastTry;
 };
 
 class CInv
