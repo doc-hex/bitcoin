@@ -733,6 +733,7 @@ int CWallet::ScanForWalletTransaction(const uint256& hashTx)
 
 void CWallet::ReacceptWalletTransactions()
 {
+    assert(pblockstore->HasFullBlocks());
     CTxDB txdb("r");
     bool fRepeat = true;
     while (fRepeat) CRITICAL_BLOCK(cs_wallet)
@@ -1218,6 +1219,12 @@ bool CWallet::CommitTransaction(CWalletTx& wtxNew, CReserveKey& reservekey)
 
         // Track how many getdata requests our transaction gets
         mapRequestCount[wtxNew.GetHash()] = 0;
+
+        // Add previous supporting transactions first (in case we are running in SPV mode, in
+        // which case the lack of these transactions might result in a failure to AddToMemoryPool)
+        if (!pblockstore->HasFullBlocks())
+            BOOST_FOREACH(CMerkleTx& tx, wtxNew.vtxPrev)
+                pblockstore->EmitTransaction((CTransaction&)tx);
 
         // Broadcast
         if (!pblockstore->EmitTransaction((CTransaction&)wtxNew))
