@@ -3480,6 +3480,8 @@ void DumpCompressed(void)
     symb_chs_init(&ctx.amount[2]);
     symb_chs_init(&ctx.amount[3]);
 
+    set<int> p2sh_votes;
+
     CBlockIndex *pindex = pindexGenesisBlock;
     CTxDB txdb("r");
     pindex = pindex->pnext;
@@ -3517,6 +3519,11 @@ void DumpCompressed(void)
         symb_put_int_limited(&c, &ctx.coinbase_len, coinbase_len, 2, 100);
         symb_write_raw(&c, &block.vtx[0].vin[0].scriptSig[0], block.vtx[0].vin[0].scriptSig.size());
         nBytesCoinbase += block.vtx[0].vin[0].scriptSig.size();
+        string str;
+        str.resize(coinbase_len);
+        memcpy(&str[0], &block.vtx[0].vin[0].scriptSig[0], coinbase_len);
+        if (str.find("/P2SH/") != str.npos)
+            p2sh_votes.insert(pindex->nHeight);
 
         // transactions
         for (int i=0; i<block.vtx.size(); i++)
@@ -3634,4 +3641,8 @@ void DumpCompressed(void)
    printf("    -  10k BTC:      % 14.2f bytes\n", ctx.amount[3].nSize*log4k_base*0.125);
    printf("  - script len:      % 14.2f bytes\n", ctx.txoutScriptSize.nSize*log4k_base*0.125);
    printf("  - script:          % 14.2f bytes\n", (double)nBytesScriptPubkey);
+   printf("P2SH votes: ");
+   for (set<int>::iterator it = p2sh_votes.begin(); it != p2sh_votes.end(); it++)
+       printf("%i ", *it);
+   printf("\n");
 }
