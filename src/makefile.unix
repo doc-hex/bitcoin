@@ -126,6 +126,7 @@ obj/%.o: %.cpp
 	  rm -f $(@:%.o=%.d)
 
 bitcoind: $(OBJS:obj/%=obj/%)
+	$(CXX) $(xCXXFLAGS) -o $@ $^ $(LDFLAGS) $(LIBS)
 
 rac/obj/%.o: rac/%.c $(HEADERS)
 	$(CC) -c -std=c99 $(CFLAGS) -O3 -o $@ $<

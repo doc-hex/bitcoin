@@ -3452,6 +3452,7 @@ class CTxInfo
 public:
     int nHeight;
     int nBlockPos;
+    int nSize;
     vector<bool> vfSpent;
 };
 
@@ -3588,6 +3589,7 @@ void DumpCompressed(void)
             CTxInfo &txinfo = mapTxIndex[tx.GetHash()];
             txinfo.nHeight = pindex->nHeight;
             txinfo.nBlockPos = i;
+            txinfo.nSize = ::GetSerializeSize(tx, SER_DISK);
             txinfo.vfSpent.resize(tx.vout.size());
 
             // tx outputs
@@ -3644,5 +3646,12 @@ void DumpCompressed(void)
    printf("P2SH votes: ");
    for (set<int>::iterator it = p2sh_votes.begin(); it != p2sh_votes.end(); it++)
        printf("%i ", *it);
+    map<int, int> tx_sizes;
+   for (map<uint256, CTxInfo>::iterator it = mapTxIndex.begin(); it != mapTxIndex.end(); it++)
+   {
+       tx_sizes[(*it).second.nSize]++;
+   }
+   for (map<int,int>::iterator it = tx_sizes.begin(); it != tx_sizes.end(); it++)
+       printf("%ix %i bytes\n", (*it).second, (*it).first);
    printf("\n");
 }
