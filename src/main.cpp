@@ -3492,6 +3492,7 @@ void DumpCompressed(void)
 
     map<int, CBlockInfo> mapBlockTxCount; // blockheight -> vtx.size()
     map<uint256, CTxInfo> mapTxIndex; // txid -> txinfo
+    map<uint160, int64> mapBalance;
 
     do {
         // block time (10.6 bit per block)
@@ -3531,6 +3532,9 @@ void DumpCompressed(void)
         {
             const CTransaction &tx = block.vtx[i];
             nTx++;
+
+            CTxIndex txidx;
+            txdb.ReadTxIndex(tx.GetHash(), txidx);
 
             // tx inputs (skip coinbase tx)
             if (i!=0)
@@ -3597,6 +3601,10 @@ void DumpCompressed(void)
             for (int j=0; j<tx.vout.size(); j++)
             {
                 const CTxOut &txout = tx.vout[j];
+                bool fSpent = !txidx.vSpent[j].IsNull();
+                CBitcoinAddress addr;
+                if (!fSpent && txout.nValue>0 && ExtractAddress(txout.scriptPubKey, addr))
+                    mapBalance[addr.GetHash160()] += txout.nValue;
                 nTxOut++;
                 symb_put_int_limited(&c, &ctx.amount[0], txout.nValue % 10000, 0, 9999);
                 symb_put_int_limited(&c, &ctx.amount[1], (txout.nValue / 10000) % 10000, 0, 9999);
@@ -3608,7 +3616,7 @@ void DumpCompressed(void)
             }
         }
 
-        printf("Dumped block %i (%i txs, %i txouts, %i txins)\n", pindex->nHeight, nTx, nTxOut, nTxIn);
+        printf("Dumped block %i (%i txs, %i txouts, %i txins, %i addr)\n", pindex->nHeight, nTx, nTxOut, nTxIn, mapBalance.size());
         pindex = pindex->pnext;
     } while(pindex);
 
@@ -3646,12 +3654,22 @@ void DumpCompressed(void)
    printf("P2SH votes: ");
    for (set<int>::iterator it = p2sh_votes.begin(); it != p2sh_votes.end(); it++)
        printf("%i ", *it);
-    map<int, int> tx_sizes;
+   map<int, int> tx_sizes;
    for (map<uint256, CTxInfo>::iterator it = mapTxIndex.begin(); it != mapTxIndex.end(); it++)
    {
        tx_sizes[(*it).second.nSize]++;
    }
    for (map<int,int>::iterator it = tx_sizes.begin(); it != tx_sizes.end(); it++)
-       printf("%ix %i bytes\n", (*it).second, (*it).first);
+       printf("%ix %i bytes, ", (*it).second, (*it).first);
+   printf("\n");
+   map<int64, int> amounts;
+   for (map<uint160, int64>::iterator it = mapBalance.begin(); it != mapBalance.end(); it++)
+   {
+       amounts[(*it).second]++;
+   }
+   for (map<int64,int>::iterator it = amounts.begin(); it != amounts.end(); it++)
+       printf("%ix %lli satoshi, ", (*it).second, (*it).first);
+   printf("\n");
+   printf("%i addresses with non-zero balance\n", mapBalance.size());
    printf("\n");
 }
