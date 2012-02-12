@@ -41,6 +41,20 @@ void MapPort(bool fMapPort);
 bool BindListenPort(std::string& strError=REF(std::string()));
 void StartNode(void* parg);
 bool StopNode();
+bool AddLocal(const CNetAddr& addr, int nScore = 0);
+bool SeenLocal(const CNetAddr& addr);
+bool IsLocal(const CNetAddr& addr);
+bool GetLocal(CNetAddr &addr, const CNetAddr *paddrPeer);
+CAddress GetLocalAddress(const CNetAddr *paddrPeer);
+
+enum
+{
+    LOCAL_NONE,
+    LOCAL_IF,
+    LOCAL_UPNP,
+    LOCAL_IRC,
+    LOCAL_HTTP,
+};
 
 enum
 {
@@ -73,7 +87,6 @@ public:
 extern bool fClient;
 extern bool fAllowDNS;
 extern uint64 nLocalServices;
-extern CAddress addrLocalHost;
 extern uint64 nLocalHostNonce;
 extern boost::array<int, 10> vnThreadsRunning;
 
@@ -109,6 +122,7 @@ public:
     unsigned int nHeaderStart;
     unsigned int nMessageStart;
     CAddress addr;
+    CNetAddr addrLocal;
     int nVersion;
     std::string strSubVer;
     bool fClient;
