@@ -2100,6 +2100,12 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv)
         if (pfrom->nVersion >= 209 && !vRecv.empty())
             vRecv >> pfrom->nStartingHeight;
 
+        if (pfrom->fInbound && addrMe.IsRoutable())
+        {
+            pfrom->addrLocal = addrMe;
+            SeenLocal(addrMe);
+        }
+
         if (pfrom->nVersion == 0)
             return false;
 
@@ -2129,12 +2135,11 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv)
         if (!pfrom->fInbound)
         {
             // Advertise our address
-            if (!fNoListen && !fUseProxy && addrLocalHost.IsRoutable() &&
-                !IsInitialBlockDownload())
+            if (!fNoListen && !fUseProxy && !IsInitialBlockDownload())
             {
-                CAddress addr(addrLocalHost);
-                addr.nTime = GetAdjustedTime();
-                pfrom->PushAddress(addr);
+                CAddress addr = GetLocalAddress(&pfrom->addr);
+                if (addr.IsRoutable())
+                    pfrom->PushAddress(addr);
             }
 
             // Get recent addresses
@@ -2726,11 +2731,11 @@ bool SendMessages(CNode* pto, bool fSendTrickle)
                         pnode->setAddrKnown.clear();
 
                     // Rebroadcast our address
-                    if (!fNoListen && !fUseProxy && addrLocalHost.IsRoutable())
+                    if (!fNoListen && !fUseProxy)
                     {
-                        CAddress addr(addrLocalHost);
-                        addr.nTime = GetAdjustedTime();
-                        pnode->PushAddress(addr);
+                        CAddress addr = GetLocalAddress(&pnode->addr);
+                        if (addr.IsRoutable())
+                            pnode->PushAddress(addr);
                     }
                 }
             }

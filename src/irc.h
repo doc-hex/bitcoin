@@ -9,6 +9,5 @@ bool RecvLine(SOCKET hSocket, std::string& strLine);
 void ThreadIRCSeed(void* parg);
 
 extern int nGotIRCAddresses;
-extern bool fGotExternalIP;
 
 #endif
