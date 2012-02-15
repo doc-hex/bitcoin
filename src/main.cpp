@@ -741,7 +741,32 @@ int CTxIndex::GetDepthInMainChain() const
     return 1 + nBestHeight - pindex->nHeight;
 }
 
-
+// Return transaction in tx, and if it was found inside a block, its hash is placed in hashBlock
+bool GetTransaction(const uint256 &hash, CTransaction &tx, uint256 &hashBlock)
+{
+    CRITICAL_BLOCK(cs_main)
+    {
+        CRITICAL_BLOCK(cs_mapTransactions)
+        {
+            map<uint256, CTransaction>::iterator mi = mapTransactions.find(hash);
+            if (mi != mapTransactions.end())
+            {
+                tx = (*mi).second;
+                return true;
+            }
+        }
+        CTxDB txdb("r");
+        CTxIndex txindex;
+        if (tx.ReadFromDisk(txdb, COutPoint(hash, 0), txindex))
+        {
+            CBlock block;
+            if (block.ReadFromDisk(txindex.pos.nFile, txindex.pos.nBlockPos, false))
+                hashBlock = block.GetHash();
+            return true;
+        }
+    }
+    return false;
+}
 
 
 
