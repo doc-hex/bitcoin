@@ -128,6 +128,8 @@ public:
 
     bool IsInitialBlockDownload();
 
+    uint64_t GetPooledTxSize();
+
 //Connected wallet/etc access methods
 
     // Ask that any listeners who have access to ask other nodes for blocks

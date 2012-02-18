@@ -520,7 +520,10 @@ bool CTransaction::AcceptToMemoryPool(bool fCheckInputs, bool* pfMissingInputs)
     return AcceptToMemoryPool(txdb, fCheckInputs, pfMissingInputs);
 }
 
-uint64 nPooledTx = 0;
+uint64_t CBlockStore::GetPooledTxSize()
+{
+    return mapTransactions.size();
+}
 
 bool CTransaction::AddToMemoryPoolUnchecked()
 {
@@ -534,7 +537,6 @@ bool CTransaction::AddToMemoryPoolUnchecked()
         for (int i = 0; i < vin.size(); i++)
             mapNextTx[vin[i].prevout] = CInPoint(&mapTransactions[hash], i);
         nTransactionsUpdated++;
-        ++nPooledTx;
     }
     return true;
 }
@@ -552,7 +554,6 @@ bool CTransaction::RemoveFromMemoryPool()
                 mapNextTx.erase(txin.prevout);
             mapTransactions.erase(hash);
             nTransactionsUpdated++;
-            --nPooledTx;
         }
     }
     return true;
@@ -2173,7 +2174,6 @@ public:
 };
 
 
-uint64 nLastBlockTx = 0;
 uint64 nLastBlockSize = 0;
 
 CBlock* CreateNewBlock(CReserveKey& reservekey)
@@ -2263,7 +2263,6 @@ CBlock* CreateNewBlock(CReserveKey& reservekey)
         // Collect transactions into block
         map<uint256, CTxIndex> mapTestPool;
         uint64 nBlockSize = 1000;
-        uint64 nBlockTx = 0;
         int nBlockSigOps = 100;
         while (!mapPriority.empty())
         {
@@ -2310,7 +2309,6 @@ CBlock* CreateNewBlock(CReserveKey& reservekey)
             // Added
             pblock->vtx.push_back(tx);
             nBlockSize += nTxSize;
-            ++nBlockTx;
             nBlockSigOps += nTxSigOps;
             nFees += nTxFees;
 
@@ -2330,7 +2328,6 @@ CBlock* CreateNewBlock(CReserveKey& reservekey)
             }
         }
 
-        nLastBlockTx = nBlockTx;
         nLastBlockSize = nBlockSize;
         printf("CreateNewBlock(): total size %lu\n", nBlockSize);
 
