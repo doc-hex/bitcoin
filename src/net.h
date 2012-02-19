@@ -51,6 +51,9 @@ enum
     LOCAL_UPNP,
     LOCAL_IRC,
     LOCAL_HTTP,
+    LOCAL_MANUAL,
+
+    LOCAL_MAX
 };
 
 bool AddLocal(const CNetAddr& addr, int nScore = LOCAL_NONE);
