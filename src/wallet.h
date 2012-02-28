@@ -39,26 +39,6 @@ private:
     MasterKeyMap mapMasterKeys;
     unsigned int nMasterKeyMaxID;
 
-    friend class CWalletDB;
-
-public:
-
-    CWallet()
-    {
-        nWalletVersion = 0;
-        fFileBacked = false;
-        nMasterKeyMaxID = 0;
-        pwalletdbEncryption = NULL;
-    }
-    CWallet(std::string strWalletFileIn)
-    {
-        nWalletVersion = 0;
-        strWalletFile = strWalletFileIn;
-        fFileBacked = true;
-        nMasterKeyMaxID = 0;
-        pwalletdbEncryption = NULL;
-    }
-
     std::map<uint256, CWalletTx> mapWallet;
     std::vector<uint256> vWalletUpdated;
 
@@ -68,9 +48,13 @@ public:
 
     std::vector<unsigned char> vchDefaultKey;
 
-    // keystore implementation
-    // Generate a new key
+    friend class CWalletDB;
+
+protected:
+    // Generate a new key, and return its pubkey
     std::vector<unsigned char> GenerateNewKey();
+
+    // keystore implementation
     // Adds a key to the store, and saves it to disk.
     bool AddKey(const CKey& key);
     // Adds a key to the store, without saving it to disk (used by LoadWallet)
@@ -85,36 +69,11 @@ public:
     bool AddCScript(const CScript& redeemScript);
     bool LoadCScript(const CScript& redeemScript) { return CCryptoKeyStore::AddCScript(redeemScript); }
 
-    bool Unlock(const SecureString& strWalletPassphrase);
-    bool ChangeWalletPassphrase(const SecureString& strOldWalletPassphrase, const SecureString& strNewWalletPassphrase);
-    bool EncryptWallet(const SecureString& strWalletPassphrase);
-
-    void MarkDirty();
-    bool AddToWallet(const CWalletTx& wtxIn);
-    bool AddToWalletIfInvolvingMe(const CTransaction& tx, const CBlock* pblock, bool fUpdate = false, bool fFindBlock = false);
-    bool EraseFromWallet(uint256 hash);
-    void WalletUpdateSpent(const CTransaction& prevout);
-    int ScanForWalletTransactions(CBlockIndex* pindexStart, bool fUpdate = false);
-    int ScanForWalletTransaction(const uint256& hashTx);
-    void ReacceptWalletTransactions();
-    void ResendWalletTransactions();
-    int64 GetBalance() const;
-    int64 GetUnconfirmedBalance() const;
-    bool CreateTransaction(const std::vector<std::pair<CScript, int64> >& vecSend, CWalletTx& wtxNew, CReserveKey& reservekey, int64& nFeeRet);
-    bool CreateTransaction(CScript scriptPubKey, int64 nValue, CWalletTx& wtxNew, CReserveKey& reservekey, int64& nFeeRet);
-    bool CommitTransaction(CWalletTx& wtxNew, CReserveKey& reservekey);
-    std::string SendMoney(CScript scriptPubKey, int64 nValue, CWalletTx& wtxNew, bool fAskFee=false);
-    std::string SendMoneyToBitcoinAddress(const CBitcoinAddress& address, int64 nValue, CWalletTx& wtxNew, bool fAskFee=false);
-
-    bool NewKeyPool();
-    bool TopUpKeyPool();
     int64 AddReserveKey(const CKeyPool& keypool);
     void ReserveKeyFromKeyPool(int64& nIndex, CKeyPool& keypool);
     void KeepKey(int64 nIndex);
     void ReturnKey(int64 nIndex);
     bool GetKeyFromPool(std::vector<unsigned char> &key, bool fAllowReuse=true);
-    int64 GetOldestKeyPoolTime();
-    void GetAllReserveAddresses(std::set<CBitcoinAddress>& setAddress);
 
     bool IsMine(const CTxIn& txin) const;
     int64 GetDebit(const CTxIn& txin) const;
@@ -179,6 +138,53 @@ public:
         }
         return nChange;
     }
+
+public:
+
+    CWallet()
+    {
+        nWalletVersion = 0;
+        fFileBacked = false;
+        nMasterKeyMaxID = 0;
+        pwalletdbEncryption = NULL;
+    }
+    CWallet(std::string strWalletFileIn)
+    {
+        nWalletVersion = 0;
+        strWalletFile = strWalletFileIn;
+        fFileBacked = true;
+        nMasterKeyMaxID = 0;
+        pwalletdbEncryption = NULL;
+    }
+
+
+
+    bool Unlock(const SecureString& strWalletPassphrase);
+    bool ChangeWalletPassphrase(const SecureString& strOldWalletPassphrase, const SecureString& strNewWalletPassphrase);
+    bool EncryptWallet(const SecureString& strWalletPassphrase);
+
+    void MarkDirty();
+    bool AddToWallet(const CWalletTx& wtxIn);
+    bool AddToWalletIfInvolvingMe(const CTransaction& tx, const CBlock* pblock, bool fUpdate = false, bool fFindBlock = false);
+    bool EraseFromWallet(uint256 hash);
+    void WalletUpdateSpent(const CTransaction& prevout);
+    int ScanForWalletTransactions(CBlockIndex* pindexStart, bool fUpdate = false);
+    int ScanForWalletTransaction(const uint256& hashTx);
+    void ReacceptWalletTransactions();
+    void ResendWalletTransactions();
+    int64 GetBalance() const;
+    int64 GetUnconfirmedBalance() const;
+    bool CreateTransaction(const std::vector<std::pair<CScript, int64> >& vecSend, CWalletTx& wtxNew, CReserveKey& reservekey, int64& nFeeRet);
+    bool CreateTransaction(CScript scriptPubKey, int64 nValue, CWalletTx& wtxNew, CReserveKey& reservekey, int64& nFeeRet);
+    bool CommitTransaction(CWalletTx& wtxNew, CReserveKey& reservekey);
+    std::string SendMoney(CScript scriptPubKey, int64 nValue, CWalletTx& wtxNew, bool fAskFee=false);
+    std::string SendMoneyToBitcoinAddress(const CBitcoinAddress& address, int64 nValue, CWalletTx& wtxNew, bool fAskFee=false);
+
+    bool NewKeyPool();
+    bool TopUpKeyPool();
+    int64 GetOldestKeyPoolTime();
+    void GetAllReserveAddresses(std::set<CBitcoinAddress>& setAddress);
+
     void SetBestChain(const CBlockLocator& loc)
     {
         CWalletDB walletdb(strWalletFile);
