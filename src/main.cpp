@@ -3273,8 +3273,7 @@ bool CheckWork(CBlock* pblock, CWallet& wallet, CReserveKey& reservekey)
         reservekey.KeepKey();
 
         // Track how many getdata requests this block gets
-        CRITICAL_BLOCK(wallet.cs_wallet)
-            wallet.mapRequestCount[pblock->GetHash()] = 0;
+        wallet.StartTracking(pblock->GetHash());
 
         // Process this block the same as if we had received it from another node
         if (!ProcessBlock(NULL, pblock))

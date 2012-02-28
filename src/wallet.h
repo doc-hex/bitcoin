@@ -27,7 +27,6 @@ private:
 
     int nWalletVersion;
 
-public:
     mutable CCriticalSection cs_wallet;
 
     bool fFileBacked;
@@ -39,6 +38,10 @@ public:
     typedef std::map<unsigned int, CMasterKey> MasterKeyMap;
     MasterKeyMap mapMasterKeys;
     unsigned int nMasterKeyMaxID;
+
+    friend class CWalletDB;
+
+public:
 
     CWallet()
     {
@@ -217,6 +220,12 @@ public:
     bool SetDefaultKey(const std::vector<unsigned char> &vchPubKey);
 
     bool SetMinVersion(int nVersion, CWalletDB* pwalletdbIn = NULL);
+
+    int GetKeyPoolSize() const { CRITICAL_BLOCK(cs_wallet) { return setKeyPool.size(); } }
+    int GetAddressBookSize() const { CRITICAL_BLOCK(cs_wallet) { return mapAddressBook.size(); } }
+    int GetWalletSize() const { CRITICAL_BLOCK(cs_wallet) { return mapWallet.size(); } }
+    std::string GetWalletFile() const { if (fFileBacked) return strWalletFile; else return ""; }
+    void StartTracking(uint256 hashBlock) { CRITICAL_BLOCK(cs_wallet) mapRequestCount[hashBlock] = 0; }
 };
 
 
@@ -657,6 +666,5 @@ public:
     )
 };
 
-bool GetWalletFile(CWallet* pwallet, std::string &strWalletFileOut);
 
 #endif

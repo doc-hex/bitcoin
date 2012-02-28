@@ -405,9 +405,9 @@ bool AppInit2(int argc, char* argv[])
     //// debug print
     printf("mapBlockIndex.size() = %d\n",   mapBlockIndex.size());
     printf("nBestHeight = %d\n",            nBestHeight);
-    printf("setKeyPool.size() = %d\n",      pwalletMain->setKeyPool.size());
-    printf("mapWallet.size() = %d\n",       pwalletMain->mapWallet.size());
-    printf("mapAddressBook.size() = %d\n",  pwalletMain->mapAddressBook.size());
+    printf("setKeyPool.size() = %d\n",      pwalletMain->GetKeyPoolSize());
+    printf("mapWallet.size() = %d\n",       pwalletMain->GetWalletSize());
+    printf("mapAddressBook.size() = %d\n",  pwalletMain->GetAddressBookSize());
 
     if (!strErrors.str().empty())
     {

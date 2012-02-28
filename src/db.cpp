@@ -1014,25 +1014,26 @@ void ThreadFlushWalletDB(void* parg)
 
 bool BackupWallet(const CWallet& wallet, const string& strDest)
 {
-    if (!wallet.fFileBacked)
+    string strWalletFile = wallet.GetWalletFile();
+    if (strWalletFile == "")
         return false;
     while (!fShutdown)
     {
         CRITICAL_BLOCK(cs_db)
         {
-            if (!mapFileUseCount.count(wallet.strWalletFile) || mapFileUseCount[wallet.strWalletFile] == 0)
+            if (!mapFileUseCount.count(strWalletFile) || mapFileUseCount[strWalletFile] == 0)
             {
                 // Flush log data to the dat file
-                CloseDb(wallet.strWalletFile);
+                CloseDb(strWalletFile);
                 dbenv.txn_checkpoint(0, 0, 0);
-                dbenv.lsn_reset(wallet.strWalletFile.c_str(), 0);
-                mapFileUseCount.erase(wallet.strWalletFile);
+                dbenv.lsn_reset(strWalletFile.c_str(), 0);
+                mapFileUseCount.erase(strWalletFile);
 
                 // Copy wallet.dat
-                filesystem::path pathSrc(GetDataDir() + "/" + wallet.strWalletFile);
+                filesystem::path pathSrc(GetDataDir() + "/" + strWalletFile);
                 filesystem::path pathDest(strDest);
                 if (filesystem::is_directory(pathDest))
-                    pathDest = pathDest / wallet.strWalletFile;
+                    pathDest = pathDest / strWalletFile;
 
                 try {
 #if BOOST_VERSION >= 104000
