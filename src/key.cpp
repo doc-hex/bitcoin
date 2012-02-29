@@ -5,6 +5,8 @@
 #include <openssl/ec.h>
 #include <openssl/ecdsa.h>
 
+#include "key.h"
+
 // Generate a private key from just the secret parameter
 int EC_KEY_regenerate_key(EC_KEY *eckey, BIGNUM *priv_key)
 {
@@ -114,4 +116,167 @@ err:
     if (O != NULL) EC_POINT_free(O);
     if (Q != NULL) EC_POINT_free(Q);
     return ret;
+}
+
+bool CDetKey::CalcPubKey()
+{
+    if (!fHavePubKey)
+    {
+        if (!fHaveSecret)
+            return false;
+        CKey key;
+        key.SetSecret(secret, fCompressed);
+        vchPubKey = key.GetPubKey();
+        fHavePubKey = true;
+    }
+    return true;
+}
+
+
+bool CDetKey::SetMaster(const std::vector<unsigned char>& vchMaster, bool fCompressedIn)
+{
+    fCompressed = fCompressedIn;
+    SHA512_CTX ctx;
+    SHA512_Init(&ctx);
+    SHA512_Update(&ctx, &vchMaster[0], vchMaster.size());
+    unsigned char vchBuffer[64];
+    SHA512_Final(vchBuffer, &ctx);
+    secret.resize(32);
+    vchChaincode.resize(32);
+    memcpy(&secret[0], &vchBuffer[0], 32);
+    memcpy(&vchChaincode[0], &vchBuffer[32], 32);
+    vchPubKey.clear();
+    fHaveSecret = true;
+    fHavePubKey = false;
+    return true;
+}
+
+bool CDetKey::SetPublic(const std::vector<unsigned char>& vchChaincodeIn, const std::vector<unsigned char>& vchPubKeyIn)
+{
+    fCompressed = (vchPubKeyIn.size() < 65);
+    vchChaincode = vchChaincodeIn;
+    vchPubKey = vchPubKeyIn;
+    secret.clear();
+    fHaveSecret = false;
+    fHavePubKey = true;
+    return true;
+}
+
+bool CDetKey::SetSecret(const std::vector<unsigned char>& vchChaincodeIn, const CSecret &secretIn, const std::vector<unsigned char> *pvchPubKeyIn, bool fCompressedIn)
+{
+    fCompressed = fCompressedIn;
+    vchChaincode = vchChaincodeIn;
+    secret = secretIn;
+    fHaveSecret = true;
+    if (pvchPubKeyIn)
+    {
+        vchPubKey = *pvchPubKeyIn;
+        fHavePubKey = true;
+    }
+    else
+    {
+        vchPubKey.clear();
+        fHavePubKey = false;
+    }
+    return true;
+}
+
+bool CDetKey::GetPubKey(std::vector<unsigned char> &vchPubKeyOut)
+{
+    if (!CalcPubKey())
+        return false;
+    vchPubKeyOut = vchPubKey;
+    return true;
+}
+
+bool CDetKey::GetSecret(CSecret& secretOut, bool &fCompressedOut) const
+{
+    if (!fHaveSecret)
+        return false;
+    fCompressedOut = fCompressed;
+    secretOut = secret;
+    return true;
+}
+
+bool CDetKey::Neuter(CDetKey& keyOut)
+{
+    if (!CalcPubKey())
+        return false;
+    keyOut.vchChaincode = vchChaincode;
+    keyOut.fCompressed = fCompressed;
+    keyOut.vchPubKey = vchPubKey;
+    keyOut.fHavePubKey = fHavePubKey;
+    keyOut.secret.clear();
+    keyOut.fHaveSecret = false;
+    return true;
+}
+
+bool CDetKey::Derive(CDetKey& keyOut, int n)
+{
+    // make sure we have the public key
+    if (!CalcPubKey())
+        return false;
+
+    // calculate vchChain = HMAC-SHA512(key=vchChaincode, msg=vchPubKey+n)
+    unsigned char vchChain[64];
+    unsigned char vchNum[4];
+    vchNum[3] = n & 0xFF; n >>= 8; vchNum[2] = n & 0xFF; n >>= 8; vchNum[1] = n & 0xFF; n >>= 8; vchNum[0] = n & 0xFF;
+    HMAC_SHA512_CTX ctxHmac;
+    HMAC_SHA512_Init(&ctxHmac, &vchChaincode[0], vchChaincode.size());
+    HMAC_SHA512_Update(&ctxHmac, &vchPubKey[0], vchPubKey.size());
+    HMAC_SHA512_Update(&ctxHmac, vchNum, 4);
+    HMAC_SHA512_Final(vchChain, &ctxHmac);
+
+    // Copy fCompressed
+    keyOut.fCompressed = fCompressed;
+
+    // set new vchChaincode = vchChain[32..64]
+    keyOut.vchChaincode.resize(32);
+    memcpy(&keyOut.vchChaincode[0], &vchChain[32], 32);
+
+    // derive new vchPubKey or secret
+    EC_KEY* key = EC_KEY_new_by_curve_name(NID_secp256k1);
+    BN_CTX *ctx = BN_CTX_new();
+    BN_CTX_start(ctx);
+    BIGNUM *bnM = BN_bin2bn(&vchChain[0],32,BN_CTX_get(ctx));
+    const EC_GROUP *group = EC_KEY_get0_group(key);
+    if (fHaveSecret)
+    {
+        // Derive new secret using known secret
+        BIGNUM *bn = BN_bin2bn(&secret[0],32,BN_CTX_get(ctx));
+        BIGNUM *order = BN_CTX_get(ctx);
+        EC_GROUP_get_order(group, order, ctx);
+        BN_mod_mul(bn, bnM, bn, order, ctx);
+        keyOut.secret.clear();
+        keyOut.secret.resize(32);
+        keyOut.fHaveSecret = true;
+        int nBytes = BN_num_bytes(bn);
+        BN_bn2bin(bn,&keyOut.secret[32 - nBytes]);
+        keyOut.vchPubKey.clear();
+        keyOut.fHavePubKey = false;
+    }
+    else
+    {
+        // Derive new pubkey using known pubkey
+        const unsigned char *pbegin = &vchPubKey[0];
+        o2i_ECPublicKey(&key, &pbegin, vchPubKey.size());
+        const EC_POINT *point1 = EC_KEY_get0_public_key(key);
+        EC_POINT *point2 = EC_POINT_new(group);
+        EC_POINT_mul(group, point2, NULL, point1, bnM, ctx);
+        EC_KEY_set_public_key(key, point2);
+        if (fCompressed)
+            EC_KEY_set_conv_form(key, POINT_CONVERSION_COMPRESSED);
+        unsigned int nSize = i2o_ECPublicKey(key, NULL);
+        keyOut.vchPubKey.resize(nSize);
+        unsigned char *pbeginOut = &keyOut.vchPubKey[0];
+        i2o_ECPublicKey(key, &pbeginOut);
+        keyOut.fHavePubKey = true;
+        keyOut.secret.clear();
+        keyOut.fHaveSecret = false;
+        EC_POINT_free(point2);
+    }
+    BN_CTX_end(ctx);
+    BN_CTX_free(ctx);
+    EC_KEY_free(key);
+    return true;
 }

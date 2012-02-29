@@ -92,6 +92,7 @@ OBJS= \
     obj/checkpoints.o \
     obj/netbase.o \
     obj/crypter.o \
+    obj/hmac.o \
     obj/key.o \
     obj/db.o \
     obj/init.o \

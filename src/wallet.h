@@ -14,6 +14,30 @@ class CWalletTx;
 class CReserveKey;
 class CWalletDB;
 
+class CDetNodeId
+{
+private:
+    uint64 nId;
+    std::vector<int> vnPath;
+
+public:
+
+    IMPLEMENT_SERIALIZE
+    (
+        READWRITE(nId);
+        int nElem = vnPath.size();
+        READWRITE(CBERInt(nElem));
+    )
+};
+
+class CDetNode
+{
+private:
+    CDetNodeId id;
+    std::vector<unsigned char> vchPubKey;
+    std::vector<unsigned char> vchChaincode;
+};
+
 // A CWallet is an extension of a keystore, which also maintains a set of
 // transactions and balances, and provides the ability to create new
 // transactions

@@ -8,12 +8,15 @@
 #include <stdexcept>
 #include <vector>
 
+#include <openssl/sha.h>
 #include <openssl/ec.h>
 #include <openssl/ecdsa.h>
 #include <openssl/obj_mac.h>
 
 #include "serialize.h"
 #include "uint256.h"
+
+#include "hmac.h"
 
 // secp160k1
 // const unsigned int PRIVATE_KEY_SIZE = 192;
@@ -322,6 +325,37 @@ public:
         key2.SetSecret(secret, fCompr);
         return GetPubKey() == key2.GetPubKey();
     }
+};
+
+class CDetKey
+{
+private:
+    bool fCompressed;
+    std::vector<unsigned char> vchChaincode;
+
+    bool fHaveSecret;
+    CSecret secret;
+
+    bool fHavePubKey;
+    std::vector<unsigned char> vchPubKey;
+
+    bool CalcPubKey();
+
+
+public:
+    // initializers
+    bool SetMaster(const std::vector<unsigned char>& vchMaster, bool fCompressedIn = true);
+    bool SetPublic(const std::vector<unsigned char>& vchChaincodeIn, const std::vector<unsigned char>& vchPubKeyIn);
+    bool SetSecret(const std::vector<unsigned char>& vchChaincodeIn, const CSecret &secretIn, const std::vector<unsigned char> *pvchPubKeyIn = NULL, bool fCompressedIn = true);
+
+    // accessors
+    bool GetPubKey(std::vector<unsigned char> &vchPubKeyOut);
+    bool GetSecret(CSecret& secretOut, bool &fCompressedOut) const;
+    bool HaveSecret() const { return fHaveSecret; }
+
+    // derive
+    bool Neuter(CDetKey& keyOut);
+    bool Derive(CDetKey& keyOut, int n);
 };
 
 #endif

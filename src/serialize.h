@@ -182,6 +182,53 @@ template<typename Stream> inline void Unserialize(Stream& s, bool& a, int, int=0
 
 
 
+// BER integers
+//  n < 128            -- 1 byte
+//  n < 128^2          -- 2 bytes
+//  n < 128^3          -- 3 bytes
+//  ...
+// stored as a little-endian number in base 128, with all digits except the last OR'ed with 0x80
+template<typename I>
+inline unsigned int GetSizeOfBER(I n)
+{
+    int nRet = 0;
+    do
+    {
+        nRet++;
+        n >>= 7;
+    }
+    while(n);
+    return nRet;
+}
+
+template<typename Stream, typename I>
+void WriteBER(Stream& os, I n)
+{
+    do
+    {
+        unsigned char chData = (n & 0x7F) | ((n > 0x7F) * 0x80);
+        WRITEDATA(os, chData);
+        n >>= 7;
+    }
+    while(n);
+    return;
+}
+
+template<typename Stream, typename I>
+I ReadBER(Stream& is)
+{
+    I n = 0;
+    do
+    {
+        unsigned char chData;
+        READDATA(is, chData);
+        n = (n << 7) | (chData & 0x7F);
+        if (!(chData & 0x80))
+            return n;
+    }
+    while(true);
+    assert(false);
+}
 
 //
 // Compact size
@@ -299,6 +346,35 @@ public:
         s.read(pbegin, pend - pbegin);
     }
 };
+
+
+template<typename I>
+class CBER
+{
+protected:
+    I *pn;
+public:
+    CBER(I& nIn) : pn(&nIn) { }
+
+    unsigned int GetSerializeSize(int, int=0) const
+    {
+        return GetSizeOfBER(*pn);
+    }
+
+    template<typename Stream>
+    void Serialize(Stream &s, int, int=0) const
+    {
+        WriteBER(s, *pn);
+    }
+
+    template<typename Stream>
+    void Unserialize(Stream& s, int, int=0)
+    {
+        *pn = ReadBER(s, *pn);
+    }
+};
+typedef CBER<int> CBERInt;
+typedef CBER<uint64> CBERUint64;
 
 
 
