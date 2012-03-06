@@ -27,6 +27,10 @@ public:
         READWRITE(nId);
         int nElem = vnPath.size();
         READWRITE(CBERInt(nElem));
+        if (fWrite)
+            const_cast<std::vector<int>*>(&vnPath)->resize(nElem);
+        BOOST_FOREACH(int nVal, vnPath)
+            READWRITE(CBERInt(nVal));
     )
 };
 
@@ -36,6 +40,8 @@ private:
     CDetNodeId id;
     std::vector<unsigned char> vchPubKey;
     std::vector<unsigned char> vchChaincode;
+    int nLastUsed;
+    std::set<int> setPool;
 };
 
 // A CWallet is an extension of a keystore, which also maintains a set of
