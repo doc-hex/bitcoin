@@ -546,8 +546,6 @@ bool AppInit2(int argc, char* argv[])
 
     RandAddSeedPerfmon();
 
-    printf("STARTED!!! %i\n", CDetNodeId().GetSerializeSize(SER_NETWORK));
-
     if (!CreateThread(StartNode, NULL))
         wxMessageBox(_("Error: CreateThread(StartNode) failed"), "Bitcoin");
 

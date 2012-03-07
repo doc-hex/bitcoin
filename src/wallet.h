@@ -32,15 +32,38 @@ public:
         BOOST_FOREACH(int nVal, vnPath)
             READWRITE(CBERInt(nVal));
     )
+
+    CDetNodeId GetParent() const
+    {
+        CDetNodeId idCopy = *this;
+        idCopy.vnPath.pop_back();
+        return idCopy;
+    }
+
+    CDetNodeId GetChild(int n) const
+    {
+        CDetNodeId idCopy = *this;
+        idCopy.vnPath.push_back(n);
+        return idCopy;
+    }
 };
 
 class CDetNode
 {
 private:
+    // identifier
     CDetNodeId id;
+
+    // only store the public key; the secret key is stored in the keystore (which is possible encrypted)
     std::vector<unsigned char> vchPubKey;
+
+    // the chaincode
     std::vector<unsigned char> vchChaincode;
-    int nLastUsed;
+
+    // the first derivative# which is not yet used (and not yet in the key pool)
+    int nNext;
+
+    // the set of derivatives that are not yet used
     std::set<int> setPool;
 };
 
