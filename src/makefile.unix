@@ -89,6 +89,7 @@ xCXXFLAGS=-pthread -Wextra -Wno-sign-compare -Wno-char-subscripts -Wno-invalid-o
     $(DEBUGFLAGS) $(DEFS) $(HARDENING) $(CXXFLAGS)
 
 OBJS= \
+    obj/logdb.o \
     obj/checkpoints.o \
     obj/netbase.o \
     obj/crypter.o \

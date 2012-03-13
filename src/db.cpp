@@ -10,6 +10,8 @@
 #include <boost/filesystem.hpp>
 #include <boost/filesystem/fstream.hpp>
 
+#include "logdb.h"
+
 using namespace std;
 using namespace boost;
 
