@@ -23,11 +23,11 @@ private:
     bool SelectCoinsMinConf(int64 nTargetValue, int nConfMine, int nConfTheirs, std::set<std::pair<const CWalletTx*,unsigned int> >& setCoinsRet, int64& nValueRet) const;
     bool SelectCoins(int64 nTargetValue, std::set<std::pair<const CWalletTx*,unsigned int> >& setCoinsRet, int64& nValueRet) const;
 
-    CWalletDB *pwalletdbEncryption;
-
     int nWalletVersion;
 
 public:
+    CWalletDB *pwalletdb;
+
     mutable CCriticalSection cs_wallet;
 
     bool fFileBacked;
@@ -45,7 +45,7 @@ public:
         nWalletVersion = 0;
         fFileBacked = false;
         nMasterKeyMaxID = 0;
-        pwalletdbEncryption = NULL;
+        pwalletdb = NULL;
     }
     CWallet(std::string strWalletFileIn)
     {
@@ -53,7 +53,16 @@ public:
         strWalletFile = strWalletFileIn;
         fFileBacked = true;
         nMasterKeyMaxID = 0;
-        pwalletdbEncryption = NULL;
+        pwalletdb = new CWalletDB(strWalletFile);
+    }
+
+    ~CWallet()
+    {
+        if (pwalletdb)
+        {
+            delete pwalletdb;
+            pwalletdb = NULL;
+        }
     }
 
     std::map<uint256, CWalletTx> mapWallet;
@@ -178,8 +187,7 @@ public:
     }
     void SetBestChain(const CBlockLocator& loc)
     {
-        CWalletDB walletdb(strWalletFile);
-        walletdb.WriteBestBlock(loc);
+        pwalletdb->WriteBestBlock(loc);
     }
 
     int LoadWallet(bool& fFirstRunRet);
@@ -216,7 +224,7 @@ public:
 
     bool SetDefaultKey(const std::vector<unsigned char> &vchPubKey);
 
-    bool SetMinVersion(int nVersion, CWalletDB* pwalletdbIn = NULL);
+    bool SetMinVersion(int nVersion);
 };
 
 

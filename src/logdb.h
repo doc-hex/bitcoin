@@ -15,6 +15,12 @@ typedef std::vector<unsigned char> data_t;
 
 class CLogDB
 {
+public:
+    typedef data_t key_type;
+    typedef data_t value_type;
+    typedef std::map<key_type, value_type>::iterator iterator;
+    typedef std::map<key_type, value_type>::const_iterator const_iterator;
+
 private:
     mutable CCriticalSection cs;
     FILE *file;
@@ -43,7 +49,7 @@ protected:
     }
 
     bool Load_();
-    bool Write_(const data_t &key, const data_t &value, bool fLoad = false)
+    bool Write_(const data_t &key, const data_t &value, bool fOverwrite = true, bool fLoad = false)
     {
         if (fReadOnly && !fLoad)
             return false;
@@ -51,7 +57,14 @@ protected:
         // update nUsed
         std::map<data_t, data_t>::iterator it = mapData.find(key);
         if (it != mapData.end())
+        {
+            if ((*it).second == value)
+                return true;
+
+            if (!fOverwrite)
+                return false;
             nUsed -= (*it).first.size() + (*it).second.size();
+        }
         nUsed += key.size() + value.size();
 
         // update data
@@ -96,9 +109,8 @@ protected:
     {
         if (file)
         {
-            if (!(Flush() && fclose(file)))
-                return false;
-
+            Flush_();
+            fclose(file);
             Init_();
         }
         return true;
@@ -112,8 +124,7 @@ public:
 
     ~CLogDB()
     {
-        if (!Close_())
-            fclose(file);
+        Close_();
     }
 
     bool Open(const char *pszFile, bool fCreate = true, bool fReadOnlyIn = false)
@@ -127,7 +138,10 @@ public:
             file = fopen(pszFile, fReadOnly ? "rb" : (fCreate ? "a+b" : "r+b"));
 
             if (file == NULL)
+            {
+                printf("Error opening %s: %s\n", pszFile, strerror(errno));
                 return false;
+            }
 
             return Load_();
         }
@@ -135,14 +149,16 @@ public:
     }
 
     template<typename K, typename V>
-    bool Write(const K &key, const V &value)
+    bool Write(const K &key, const V &value, bool fOverwrite = true)
     {
         CDataStream ssk(SER_DISK);
         ssk << key;
+        data_t datak(ssk.begin(), ssk.end());
         CDataStream ssv(SER_DISK);
         ssv << value;
+        data_t datav(ssv.begin(), ssv.end());
         CRITICAL_BLOCK(cs)
-            return Write_(data_t(ssk.begin(),ssk.end()),data_t(ssv.begin(), ssv.end()));
+            return Write_(datak, datav, fOverwrite);
         return false;
     }
 
@@ -151,32 +167,35 @@ public:
     {
         CDataStream ssk(SER_DISK);
         ssk << key;
-        data_t val;
+        data_t datak(ssk.begin(), ssk.end());
+        data_t datav;
         CRITICAL_BLOCK(cs)
-            if (!Read_(key,val))
+            if (!Read_(datak,datav))
                 return false;
-        CDataStream ssv(val, SER_DISK);
+        CDataStream ssv(datav, SER_DISK);
         ssv >> value;
         return true;
     }
 
     template<typename K>
-    bool Exists(const data_t &key) const
+    bool Exists(const K &key) const
     {
         CDataStream ssk(SER_DISK);
         ssk << key;
+        data_t datak(ssk.begin(), ssk.end());
         CRITICAL_BLOCK(cs)
-            return Exists_(data_t(ssk.begin(), ssk.end()));
+            return Exists_(datak);
         return false;
     }
 
     template<typename K>
-    bool Erase(const data_t &key)
+    bool Erase(const K &key)
     { 
         CDataStream ssk(SER_DISK);
         ssk << key;
+        data_t datak(ssk.begin(), ssk.end());
         CRITICAL_BLOCK(cs)
-            return Erase_(data_t(ssk.begin(), ssk.end()));
+            return Erase_(datak);
         return false;
     }
 
@@ -185,6 +204,9 @@ public:
     bool IsDirty() const    { CRITICAL_BLOCK(cs) return !setDirty.empty(); return false; }
     bool IsOpen() const     { return file != NULL; }
     bool IsReadOnly() const { return fReadOnly; }
+
+    const_iterator begin() const { return mapData.begin(); }
+    const_iterator end() const   { return mapData.end(); }
 };
 
 #endif

@@ -359,7 +359,7 @@ bool AppInit2(int argc, char* argv[])
     printf("Loading wallet...\n");
     nStart = GetTimeMillis();
     bool fFirstRun;
-    pwalletMain = new CWallet("wallet.dat");
+    pwalletMain = new CWallet(GetDataDir() + "/wallet.ldb");
     int nLoadWalletRet = pwalletMain->LoadWallet(fFirstRun);
     if (nLoadWalletRet != DB_LOAD_OK)
     {
@@ -385,9 +385,8 @@ bool AppInit2(int argc, char* argv[])
         pindexRescan = pindexGenesisBlock;
     else
     {
-        CWalletDB walletdb("wallet.dat");
         CBlockLocator locator;
-        if (walletdb.ReadBestBlock(locator))
+        if (pwalletMain->pwalletdb->ReadBestBlock(locator))
             pindexRescan = locator.GetBlockIndex();
     }
     if (pindexBest != pindexRescan)

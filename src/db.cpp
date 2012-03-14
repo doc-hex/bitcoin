@@ -720,30 +720,18 @@ int64 CWalletDB::GetAccountCreditDebit(const string& strAccount)
     return nCreditDebit;
 }
 
+typedef pair<data_t, data_t> data_entry_t;
+
 void CWalletDB::ListAccountCreditDebit(const string& strAccount, list<CAccountingEntry>& entries)
 {
     bool fAllAccounts = (strAccount == "*");
 
-    Dbc* pcursor = GetCursor();
-    if (!pcursor)
-        throw runtime_error("CWalletDB::ListAccountCreditDebit() : cannot create DB cursor");
-    unsigned int fFlags = DB_SET_RANGE;
-    loop
+    for (const_iterator it = begin(); it!=end(); it++)
     {
-        // Read next record
-        CDataStream ssKey;
-        if (fFlags == DB_SET_RANGE)
-            ssKey << boost::make_tuple(string("acentry"), (fAllAccounts? string("") : strAccount), uint64(0));
-        CDataStream ssValue;
-        int ret = ReadAtCursor(pcursor, ssKey, ssValue, fFlags);
-        fFlags = DB_NEXT;
-        if (ret == DB_NOTFOUND)
-            break;
-        else if (ret != 0)
-        {
-            pcursor->close();
-            throw runtime_error("CWalletDB::ListAccountCreditDebit() : error scanning DB");
-        }
+        const data_entry_t& entry = *it;
+
+        CDataStream ssKey(entry.first, SER_DISK);
+        CDataStream ssValue(entry.second, SER_DISK);
 
         // Unserialize
         string strType;
@@ -758,8 +746,6 @@ void CWalletDB::ListAccountCreditDebit(const string& strAccount, list<CAccountin
         ssValue >> acentry;
         entries.push_back(acentry);
     }
-
-    pcursor->close();
 }
 
 
@@ -773,21 +759,13 @@ int CWalletDB::LoadWallet(CWallet* pwallet)
     //// todo: shouldn't we catch exceptions and try to recover and continue?
     CRITICAL_BLOCK(pwallet->cs_wallet)
     {
-        // Get cursor
-        Dbc* pcursor = GetCursor();
-        if (!pcursor)
-            return DB_CORRUPT;
-
-        loop
+        for (const_iterator it = begin(); it!=end(); it++)
         {
+            const data_entry_t& entry = *it;
+
             // Read next record
-            CDataStream ssKey;
-            CDataStream ssValue;
-            int ret = ReadAtCursor(pcursor, ssKey, ssValue);
-            if (ret == DB_NOTFOUND)
-                break;
-            else if (ret != 0)
-                return DB_CORRUPT;
+            CDataStream ssKey(entry.first, SER_DISK);
+            CDataStream ssValue(entry.second, SER_DISK);
 
             // Unserialize
             // Taking advantage of the fact that pair serialization
@@ -929,7 +907,6 @@ int CWalletDB::LoadWallet(CWallet* pwallet)
                     return DB_CORRUPT;
             }
         }
-        pcursor->close();
     }
 
     BOOST_FOREACH(uint256 hash, vWalletUpgrade)
@@ -942,21 +919,12 @@ int CWalletDB::LoadWallet(CWallet* pwallet)
     if (fIsEncrypted && (nFileVersion == 40000 || nFileVersion == 50000))
         return DB_NEED_REWRITE;
 
-    if (nFileVersion < CLIENT_VERSION) // Update
-    {
-        // Get rid of old debug.log file in current directory
-        if (nFileVersion <= 105 && !pszSetDataDir[0])
-            unlink("debug.log");
-
-        WriteVersion(CLIENT_VERSION);
-    }
-
     return DB_LOAD_OK;
 }
 
 void ThreadFlushWalletDB(void* parg)
 {
-    const string& strFile = ((const string*)parg)[0];
+    CWalletDB *pwalletdb = (CWalletDB*)parg;
     static bool fOneThread;
     if (fOneThread)
         return;
@@ -979,44 +947,15 @@ void ThreadFlushWalletDB(void* parg)
 
         if (nLastFlushed != nWalletDBUpdated && GetTime() - nLastWalletUpdate >= 2)
         {
-            TRY_CRITICAL_BLOCK(cs_db)
-            {
-                // Don't do this if any databases are in use
-                int nRefCount = 0;
-                map<string, int>::iterator mi = mapFileUseCount.begin();
-                while (mi != mapFileUseCount.end())
-                {
-                    nRefCount += (*mi).second;
-                    mi++;
-                }
-
-                if (nRefCount == 0 && !fShutdown)
-                {
-                    map<string, int>::iterator mi = mapFileUseCount.find(strFile);
-                    if (mi != mapFileUseCount.end())
-                    {
-                        printf("%s ", DateTimeStrFormat("%x %H:%M:%S", GetTime()).c_str());
-                        printf("Flushing wallet.dat\n");
-                        nLastFlushed = nWalletDBUpdated;
-                        int64 nStart = GetTimeMillis();
-
-                        // Flush wallet.dat so it's self contained
-                        CloseDb(strFile);
-                        dbenv.txn_checkpoint(0, 0, 0);
-                        dbenv.lsn_reset(strFile.c_str(), 0);
-
-                        mapFileUseCount.erase(mi++);
-                        printf("Flushed wallet.dat %"PRI64d"ms\n", GetTimeMillis() - nStart);
-                    }
-                }
-            }
+            pwalletdb->Flush();
+            nLastFlushed = nWalletDBUpdated;
         }
     }
 }
 
 bool BackupWallet(const CWallet& wallet, const string& strDest)
 {
-    if (!wallet.fFileBacked)
+/*    if (!wallet.fFileBacked)
         return false;
     while (!fShutdown)
     {
@@ -1051,6 +990,6 @@ bool BackupWallet(const CWallet& wallet, const string& strDest)
             }
         }
         Sleep(100);
-    }
+    } */
     return false;
 }

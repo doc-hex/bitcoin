@@ -6,6 +6,7 @@
 #define BITCOIN_DB_H
 
 #include "key.h"
+#include "logdb.h"
 
 #include <map>
 #include <string>
@@ -352,11 +353,13 @@ enum DBErrors
     DB_NEED_REWRITE
 };
 
-class CWalletDB : public CDB
+class CWalletDB : public CLogDB
 {
 public:
-    CWalletDB(std::string strFilename, const char* pszMode="r+") : CDB(strFilename.c_str(), pszMode)
+    CWalletDB(std::string strFilename)
     {
+        if (!Open(strFilename.c_str()))
+            printf("Opening %s failed\n", strFilename.c_str());
     }
 private:
     CWalletDB(const CWalletDB&);

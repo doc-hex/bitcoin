@@ -854,9 +854,6 @@ Value movecmd(const Array& params, bool fHelp)
     if (params.size() > 4)
         strComment = params[4].get_str();
 
-    CWalletDB walletdb(pwalletMain->strWalletFile);
-    walletdb.TxnBegin();
-
     int64 nNow = GetAdjustedTime();
 
     // Debit
@@ -866,7 +863,7 @@ Value movecmd(const Array& params, bool fHelp)
     debit.nTime = nNow;
     debit.strOtherAccount = strTo;
     debit.strComment = strComment;
-    walletdb.WriteAccountingEntry(debit);
+    pwalletMain->pwalletdb->WriteAccountingEntry(debit);
 
     // Credit
     CAccountingEntry credit;
@@ -875,9 +872,7 @@ Value movecmd(const Array& params, bool fHelp)
     credit.nTime = nNow;
     credit.strOtherAccount = strFrom;
     credit.strComment = strComment;
-    walletdb.WriteAccountingEntry(credit);
-
-    walletdb.TxnCommit();
+    pwalletMain->pwalletdb->WriteAccountingEntry(credit);
 
     return true;
 }
