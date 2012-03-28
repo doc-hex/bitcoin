@@ -91,6 +91,7 @@ CDB::CDB(const char* pszFile, const char* pszMode) : pdb(NULL)
             dbenv.set_lg_max(104857600);
             dbenv.set_lk_max_locks(10000);
             dbenv.set_lk_max_objects(10000);
+            dbenv.set_lk_detect(DB_LOCK_OLDEST);
             dbenv.set_errfile(fopen(strErrorFile.c_str(), "a")); /// debug
             dbenv.set_flags(DB_AUTO_COMMIT, 1);
             ret = dbenv.open(strDataDir.c_str(),
@@ -138,6 +139,8 @@ CDB::CDB(const char* pszFile, const char* pszMode) : pdb(NULL)
                 WriteVersion(CLIENT_VERSION);
                 fReadOnly = fTmp;
             }
+
+            dbenv.lock_detect(DB_LOCK_OLDEST, 0, NULL);
 
             mapDb[strFile] = pdb;
         }
