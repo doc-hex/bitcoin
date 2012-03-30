@@ -372,8 +372,12 @@ bool CTransaction::CheckTransaction() const
     return true;
 }
 
-bool CTransaction::AcceptToMemoryPool(CTxDB& txdb, bool fCheckInputs, bool* pfMissingInputs)
+bool CTransaction::AcceptToMemoryPool(CTxDB *ptxdb, bool fCheckInputs, bool* pfMissingInputs)
 {
+    //ptxdb should always be set if (pblockstore->HasFullBlocks())
+    if (pblockstore->HasFullBlocks())
+        assert(ptxdb);
+
     if (pfMissingInputs)
         *pfMissingInputs = false;
 
@@ -400,8 +404,8 @@ bool CTransaction::AcceptToMemoryPool(CTxDB& txdb, bool fCheckInputs, bool* pfMi
     CRITICAL_BLOCK(cs_mapTransactions)
         if (mapTransactions.count(hash))
             return false;
-    if (fCheckInputs)
-        if (txdb.ContainsTx(hash))
+    if (fCheckInputs && ptxdb)
+        if (ptxdb->ContainsTx(hash))
             return false;
 
     // Check for conflicts with in-memory transactions
@@ -437,7 +441,7 @@ bool CTransaction::AcceptToMemoryPool(CTxDB& txdb, bool fCheckInputs, bool* pfMi
         MapPrevTx mapInputs;
         map<uint256, CTxIndex> mapUnused;
         bool fInvalid = false;
-        if (!FetchInputs(txdb, mapUnused, false, false, mapInputs, fInvalid))
+        if (!FetchInputs(ptxdb, mapUnused, false, false, mapInputs, fInvalid))
         {
             if (fInvalid)
                 return error("AcceptToMemoryPool() : FetchInputs found invalid tx %s", hash.ToString().substr(0,10).c_str());
@@ -516,8 +520,10 @@ bool CTransaction::AcceptToMemoryPool(CTxDB& txdb, bool fCheckInputs, bool* pfMi
 
 bool CTransaction::AcceptToMemoryPool(bool fCheckInputs, bool* pfMissingInputs)
 {
-    CTxDB txdb("r");
-    return AcceptToMemoryPool(txdb, fCheckInputs, pfMissingInputs);
+    CTxDB* ptxdb = NULL;
+    if (pblockstore->HasFullBlocks())
+        ptxdb = new CTxDB("r");
+    return AcceptToMemoryPool(ptxdb, fCheckInputs, pfMissingInputs);
 }
 
 uint64_t CBlockStore::GetPooledTxSize()
@@ -615,31 +621,6 @@ int CMerkleTx::GetBlocksToMaturity() const
 }
 
 
-
-bool CWalletTx::AcceptWalletTransaction(CTxDB& txdb, bool fCheckInputs)
-{
-    CRITICAL_BLOCK(cs_mapTransactions)
-    {
-        // Add previous supporting transactions first
-        BOOST_FOREACH(CMerkleTx& tx, vtxPrev)
-        {
-            if (!tx.IsCoinBase())
-            {
-                uint256 hash = tx.GetHash();
-                if (!mapTransactions.count(hash) && !txdb.ContainsTx(hash))
-                    tx.AcceptToMemoryPool(txdb, fCheckInputs);
-            }
-        }
-        return AcceptToMemoryPool(txdb, fCheckInputs);
-    }
-    return false;
-}
-
-bool CWalletTx::AcceptWalletTransaction() 
-{
-    CTxDB txdb("r");
-    return AcceptWalletTransaction(txdb);
-}
 
 int CTxIndex::GetDepthInMainChain() const
 {
@@ -895,7 +876,7 @@ bool CTransaction::DisconnectInputs(CTxDB& txdb)
 }
 
 
-bool CTransaction::FetchInputs(CTxDB& txdb, const map<uint256, CTxIndex>& mapTestPool,
+bool CTransaction::FetchInputs(CTxDB* ptxdb, const map<uint256, CTxIndex>& mapTestPool,
                                bool fBlock, bool fMiner, MapPrevTx& inputsRet, bool& fInvalid)
 {
     // FetchInputs can return false either because we just haven't seen some inputs
@@ -923,8 +904,12 @@ bool CTransaction::FetchInputs(CTxDB& txdb, const map<uint256, CTxIndex>& mapTes
         }
         else
         {
-            // Read txindex from txdb
-            fFound = txdb.ReadTxIndex(prevout.hash, txindex);
+            if (ptxdb)
+            {
+                // Read txindex from ptxdb
+                fFound = ptxdb->ReadTxIndex(prevout.hash, txindex);
+            }else
+                fFound = false;
         }
         if (!fFound && (fBlock || fMiner))
             return fMiner ? false : error("FetchInputs() : %s prev tx %s index entry not found", GetHash().ToString().substr(0,10).c_str(),  prevout.hash.ToString().substr(0,10).c_str());
@@ -1211,7 +1196,7 @@ bool CBlock::ConnectBlock(CTxDB& txdb, CBlockIndex* pindex, bool fHeadersOnly)
         if (!tx.IsCoinBase() && pblockstore->HasFullBlocks())
         {
             bool fInvalid;
-            if (!tx.FetchInputs(txdb, mapQueuedChanges, true, false, mapInputs, fInvalid))
+            if (!tx.FetchInputs(&txdb, mapQueuedChanges, true, false, mapInputs, fInvalid))
                 return false;
 
             if (fStrictPayToScriptHash)
@@ -1347,7 +1332,7 @@ bool static Reorganize(CTxDB& txdb, CBlockIndex* pindexNew)
 
     // Resurrect memory transactions that were in the disconnected branch
     BOOST_FOREACH(CTransaction& tx, vResurrect)
-        tx.AcceptToMemoryPool(txdb, false);
+        tx.AcceptToMemoryPool(&txdb, false);
 
     // Delete redundant memory transactions that are in the connected branch
     BOOST_FOREACH(CTransaction& tx, vDelete)
@@ -2290,7 +2275,7 @@ CBlock* CreateNewBlock(CReserveKey& reservekey)
             map<uint256, CTxIndex> mapTestPoolTmp(mapTestPool);
             MapPrevTx mapInputs;
             bool fInvalid;
-            if (!tx.FetchInputs(txdb, mapTestPoolTmp, false, true, mapInputs, fInvalid))
+            if (!tx.FetchInputs(&txdb, mapTestPoolTmp, false, true, mapInputs, fInvalid))
                 continue;
 
             int64 nTxFees = tx.GetValueIn(mapInputs)-tx.GetValueOut();
@@ -2665,18 +2650,25 @@ void GenerateBitcoins(bool fGenerate, CWallet* pwallet)
 
 
 
-bool CBlockStore::EmitTransaction(CTransaction& transaction)
+bool CBlockStore::EmitTransaction(CTransaction& transaction, bool fCheckInputs)
 {
+    if (!IsInitialBlockDownload() && HasFullBlocks())
+        fCheckInputs = true;
+
     CRITICAL_BLOCK(cs_main)
     {
-        if (!pblockstore->HasFullBlocks())
+        if (!pblockstore->HasFullBlocks() && fCheckInputs)
             if (!transaction.ClientConnectInputs())
                 return false;
 
         vector<uint256> vWorkQueue;
         bool fMissingInputs = false;
 
-        if (transaction.AcceptToMemoryPool(pblockstore->HasFullBlocks(), &fMissingInputs))
+        CTxDB* ptxdb = NULL;
+        if (pblockstore->HasFullBlocks())
+            ptxdb = new CTxDB("r");
+
+        if (transaction.AcceptToMemoryPool(ptxdb, fCheckInputs, &fMissingInputs))
         {
             CRITICAL_BLOCK(cs_callbacks)
                 queueCommitTransactionToMemoryPoolCallbacks.push(new CTransaction(transaction));

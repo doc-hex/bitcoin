@@ -10,6 +10,36 @@ using namespace std;
 
 BOOST_AUTO_TEST_SUITE(util_tests)
 
+CCriticalSection shared_cs;
+bool fIsInCS = false;
+
+void ThreadTwo(void* parg)
+{
+    Sleep(100);
+
+    CRITICAL_BLOCK(shared_cs)
+    {
+        BOOST_CHECK_MESSAGE(!fIsInCS, "CCriticalSection doesnt lock?");
+        fIsInCS = true;
+        Sleep(200);
+        fIsInCS = false;
+    }
+}
+
+BOOST_AUTO_TEST_CASE(util_threadedcriticalsection)
+{
+    BOOST_CHECK_MESSAGE(CreateThread(ThreadTwo, NULL), "CreateThread Failed!");
+
+    CRITICAL_BLOCK(shared_cs)
+    {
+        fIsInCS = true;
+        Sleep(200);
+        fIsInCS = false;
+    }
+    Sleep(50);
+    BOOST_CHECK_MESSAGE(fIsInCS, "CRITICAL_BLOCK doesnt unlock or CreateThread doesnt create a thread.");
+}
+
 BOOST_AUTO_TEST_CASE(util_criticalsection)
 {
     CCriticalSection cs;
