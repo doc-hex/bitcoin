@@ -68,6 +68,12 @@ contains(USE_SSL, 1) {
     DEFINES += USE_SSL
 }
 
+# use: qmake "USE_IPV6=1"
+contains(USE_IPV6, 1) {
+    message(Building with IPv6 support)
+    DEFINES += USE_IPV6
+}
+
 # use: qmake "FIRST_CLASS_MESSAGING=1"
 contains(FIRST_CLASS_MESSAGING, 1) {
     message(Building with first-class messaging)

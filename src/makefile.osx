@@ -85,6 +85,10 @@ else
 endif
 endif
 
+ifdef USE_IPV6
+	DEFS += -DUSE_IPV6
+endif
+
 all: bitcoind
 
 # auto-generated dependencies:

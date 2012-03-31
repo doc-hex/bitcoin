@@ -160,20 +160,52 @@ bool ConnectSocket(const CService &addrDest, SOCKET& hSocketRet, int nTimeout)
 {
     hSocketRet = INVALID_SOCKET;
 
-    SOCKET hSocket = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+    bool fProxy = (fUseProxy && addrDest.IsRoutable());
+    struct sockaddr_storage sockaddr;
+    int nFamily = 0;
+    size_t nSockAddrLen = 0;
+
+    if (fProxy && !addrDest.IsIPv4())
+    {
+        // TODO: implement SOCKS5 (which supports IPv6 addresses)
+        // for now, just fail
+        return false;
+    }
+
+    const CService &addrConnect = fProxy ? addrProxy : addrDest;
+
+    if (addrConnect.IsIPv4())
+    {
+        // Use IPv4 stack to connect to IPv4 addresses
+        struct sockaddr_in sockaddr4;
+        if (!addrConnect.GetSockAddr(&sockaddr4))
+            return false;
+        memcpy(&sockaddr, &sockaddr4, sizeof(sockaddr4));
+        nSockAddrLen = sizeof(sockaddr4);
+        nFamily = AF_INET;
+    }
+    else
+    {
+#ifdef USE_IPV6
+        struct sockaddr_in6 sockaddr6;
+        if (!addrConnect.GetSockAddr6(&sockaddr6))
+            return false;
+        memcpy(&sockaddr, &sockaddr6, sizeof(sockaddr6));
+        nSockAddrLen = sizeof(sockaddr6);
+        nFamily = AF_INET6;
+#else
+        // IPv6 support not compiled in, just fail
+        return false;
+#endif
+    }
+
+    SOCKET hSocket = socket(nFamily, SOCK_STREAM, IPPROTO_TCP);
     if (hSocket == INVALID_SOCKET)
         return false;
 #ifdef SO_NOSIGPIPE
     int set = 1;
     setsockopt(hSocket, SOL_SOCKET, SO_NOSIGPIPE, (void*)&set, sizeof(int));
 #endif
-
-    bool fProxy = (fUseProxy && addrDest.IsRoutable());
-    struct sockaddr_in sockaddr;
-    if (fProxy)
-        addrProxy.GetSockAddr(&sockaddr);
-    else
-        addrDest.GetSockAddr(&sockaddr);
 
 #ifdef WIN32
     u_long fNonblock = 1;
@@ -187,8 +219,7 @@ bool ConnectSocket(const CService &addrDest, SOCKET& hSocketRet, int nTimeout)
         return false;
     }
 
-
-    if (connect(hSocket, (struct sockaddr*)&sockaddr, sizeof(sockaddr)) == SOCKET_ERROR)
+    if (connect(hSocket, (struct sockaddr*)&sockaddr, nSockAddrLen) == SOCKET_ERROR)
     {
         // WSAEINVAL is here because some legacy version of winsock uses it
         if (WSAGetLastError() == WSAEINPROGRESS || WSAGetLastError() == WSAEWOULDBLOCK || WSAGetLastError() == WSAEINVAL)

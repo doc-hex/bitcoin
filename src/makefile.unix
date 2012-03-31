@@ -43,6 +43,10 @@ ifneq (${USE_SSL}, 0)
 	DEFS += -DUSE_SSL
 endif
 
+ifneq (${USE_UPV6}, 0)
+	DEFS += -DUSE_IPV6
+endif
+
 LIBS+= \
  -Wl,-B$(LMODE2) \
    -l z \
