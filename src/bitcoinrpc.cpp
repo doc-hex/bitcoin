@@ -59,10 +59,10 @@ double GetDifficulty(const CBlockIndex* blockindex = NULL)
     // minimum difficulty = 1.0.
     if (blockindex == NULL)
     {
-        if (pindexBest == NULL)
+        if (pblockstore->GetBestBlockIndex() == NULL)
             return 1.0;
         else
-            blockindex = pindexBest;
+            blockindex = pblockstore->GetBestBlockIndex();
     }
 
     int nShift = (blockindex->nBits >> 24) & 0xff;
@@ -233,7 +233,7 @@ Value getblockcount(const Array& params, bool fHelp)
             "getblockcount\n"
             "Returns the number of blocks in the longest block chain.");
 
-    return nBestHeight;
+    return pblockstore->GetBestBlockIndex()->nHeight;
 }
 
 
@@ -245,7 +245,7 @@ Value getblocknumber(const Array& params, bool fHelp)
             "getblocknumber\n"
             "Deprecated.  Use getblockcount.");
 
-    return nBestHeight;
+    return pblockstore->GetBestBlockIndex()->nHeight;
 }
 
 
@@ -333,7 +333,7 @@ Value getinfo(const Array& params, bool fHelp)
     obj.push_back(Pair("protocolversion",(int)PROTOCOL_VERSION));
     obj.push_back(Pair("walletversion", pwalletMain->GetVersion()));
     obj.push_back(Pair("balance",       ValueFromAmount(pwalletMain->GetBalance())));
-    obj.push_back(Pair("blocks",        (int)nBestHeight));
+    obj.push_back(Pair("blocks",        (int)pblockstore->GetBestBlockIndex()->nHeight));
     obj.push_back(Pair("connections",   (int)vNodes.size()));
     obj.push_back(Pair("proxy",         (fUseProxy ? addrProxy.ToStringIPPort() : string())));
     obj.push_back(Pair("difficulty",    (double)GetDifficulty()));
@@ -356,7 +356,7 @@ Value getmininginfo(const Array& params, bool fHelp)
             "Returns an object containing mining-related information.");
 
     Object obj;
-    obj.push_back(Pair("blocks",        (int)nBestHeight));
+    obj.push_back(Pair("blocks",        (int)pblockstore->GetBestBlockIndex()->nHeight));
     obj.push_back(Pair("currentblocksize",(uint64_t)nLastBlockSize));
     obj.push_back(Pair("currentblocktx",(uint64_t)nLastBlockTx));
     obj.push_back(Pair("difficulty",    (double)GetDifficulty()));
@@ -1388,7 +1388,7 @@ Value listsinceblock(const Array& params, bool fHelp)
             "listsinceblock [blockid] [target-confirmations]\n"
             "Get all transactions in blocks since block [blockid], or all transactions if omitted");
 
-    CBlockIndex *pindex = NULL;
+    const CBlockIndex *pindex = NULL;
     int target_confirms = 1;
 
     if (params.size() > 0)
@@ -1407,7 +1407,7 @@ Value listsinceblock(const Array& params, bool fHelp)
             throw JSONRPCError(-8, "Invalid parameter");
     }
 
-    int depth = pindex ? (1 + nBestHeight - pindex->nHeight) : -1;
+    int depth = pindex ? (1 + pblockstore->GetBestBlockIndex()->nHeight - pindex->nHeight) : -1;
 
     Array transactions;
 
@@ -1424,14 +1424,14 @@ Value listsinceblock(const Array& params, bool fHelp)
     if (target_confirms == 1)
     {
         printf("oops!\n");
-        lastblock = hashBestChain;
+        lastblock = *(pblockstore->GetBestBlockIndex()->phashBlock);
     }
     else
     {
-        int target_height = pindexBest->nHeight + 1 - target_confirms;
+        int target_height = pblockstore->GetBestBlockIndex()->nHeight + 1 - target_confirms;
 
-        CBlockIndex *block;
-        for (block = pindexBest;
+        const CBlockIndex *block;
+        for (block = pblockstore->GetBestBlockIndex();
              block && block->nHeight > target_height;
              block = block->pprev)  { }
 
@@ -1760,8 +1760,11 @@ Value getwork(const Array& params, bool fHelp)
     if (vNodes.empty())
         throw JSONRPCError(-9, "Bitcoin is not connected!");
 
-    if (IsInitialBlockDownload())
+    if (pblockstore->IsInitialBlockDownload())
         throw JSONRPCError(-10, "Bitcoin is downloading blocks...");
+
+    if (!pblockstore->HasFullBlocks())
+        throw JSONRPCError(-18, "Bitcoin does not have full blocks for transaction verification...");
 
     typedef map<uint256, pair<CBlock*, CScript> > mapNewBlock_t;
     static mapNewBlock_t mapNewBlock;
@@ -1772,13 +1775,13 @@ Value getwork(const Array& params, bool fHelp)
     {
         // Update block
         static unsigned int nTransactionsUpdatedLast;
-        static CBlockIndex* pindexPrev;
+        static const CBlockIndex* pindexPrev;
         static int64 nStart;
         static CBlock* pblock;
-        if (pindexPrev != pindexBest ||
+        if (pindexPrev != pblockstore->GetBestBlockIndex() ||
             (nTransactionsUpdated != nTransactionsUpdatedLast && GetTime() - nStart > 60))
         {
-            if (pindexPrev != pindexBest)
+            if (pindexPrev != pblockstore->GetBestBlockIndex())
             {
                 // Deallocate old blocks since they're obsolete now
                 mapNewBlock.clear();
@@ -1787,7 +1790,7 @@ Value getwork(const Array& params, bool fHelp)
                 vNewBlock.clear();
             }
             nTransactionsUpdatedLast = nTransactionsUpdated;
-            pindexPrev = pindexBest;
+            pindexPrev = pblockstore->GetBestBlockIndex();
             nStart = GetTime();
 
             // Create new block
@@ -1867,26 +1870,29 @@ Value getmemorypool(const Array& params, bool fHelp)
             "  \"bits\" : compressed target of next block\n"
             "If [data] is specified, tries to solve the block and returns true if it was successful.");
 
+    if (!pblockstore->HasFullBlocks())
+        throw JSONRPCError(-18, "Bitcoin does not have full blocks for transaction verification...");
+
     if (params.size() == 0)
     {
         if (vNodes.empty())
             throw JSONRPCError(-9, "Bitcoin is not connected!");
 
-        if (IsInitialBlockDownload())
+        if (pblockstore->IsInitialBlockDownload())
             throw JSONRPCError(-10, "Bitcoin is downloading blocks...");
 
         static CReserveKey reservekey(pwalletMain);
 
         // Update block
         static unsigned int nTransactionsUpdatedLast;
-        static CBlockIndex* pindexPrev;
+        static const CBlockIndex* pindexPrev;
         static int64 nStart;
         static CBlock* pblock;
-        if (pindexPrev != pindexBest ||
+        if (pindexPrev != pblockstore->GetBestBlockIndex() ||
             (nTransactionsUpdated != nTransactionsUpdatedLast && GetTime() - nStart > 5))
         {
             nTransactionsUpdatedLast = nTransactionsUpdated;
-            pindexPrev = pindexBest;
+            pindexPrev = pblockstore->GetBestBlockIndex();
             nStart = GetTime();
 
             // Create new block
@@ -1929,10 +1935,10 @@ Value getmemorypool(const Array& params, bool fHelp)
     {
         // Parse parameters
         CDataStream ssBlock(ParseHex(params[0].get_str()));
-        CBlock pblock;
-        ssBlock >> pblock;
+        CBlock block;
+        ssBlock >> block;
 
-        return ProcessBlock(NULL, &pblock);
+        return pblockstore->EmitBlock(block);
     }
 }
 
@@ -1944,11 +1950,11 @@ Value getblockhash(const Array& params, bool fHelp)
             "Returns hash of block in best-block-chain at <index>.");
 
     int nHeight = params[0].get_int();
-    if (nHeight < 0 || nHeight > nBestHeight)
+    if (nHeight < 0 || nHeight > pblockstore->GetBestBlockIndex()->nHeight)
         throw runtime_error("Block number out of range.");
 
     CBlock block;
-    CBlockIndex* pblockindex = mapBlockIndex[hashBestChain];
+    const CBlockIndex* pblockindex = pblockstore->GetBestBlockIndex();
     while (pblockindex->nHeight > nHeight)
         pblockindex = pblockindex->pprev;
     return pblockindex->phashBlock->GetHex();
@@ -1964,11 +1970,11 @@ Value getblock(const Array& params, bool fHelp)
     std::string strHash = params[0].get_str();
     uint256 hash(strHash);
 
-    if (mapBlockIndex.count(hash) == 0)
+    CBlock block;
+    const CBlockIndex* pblockindex = pblockstore->GetBlockIndex(hash);
+    if (!pblockindex)
         throw JSONRPCError(-5, "Block not found");
 
-    CBlock block;
-    CBlockIndex* pblockindex = mapBlockIndex[hash];
     block.ReadFromDisk(pblockindex, true);
 
     return blockToJSON(block, pblockindex);
@@ -2498,7 +2504,6 @@ void ThreadRPCServer2(void* parg)
             {
                 // Execute
                 Value result;
-                CRITICAL_BLOCK(cs_main)
                 CRITICAL_BLOCK(pwalletMain->cs_wallet)
                     result = (*(*mi).second)(params, false);
 

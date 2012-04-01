@@ -60,7 +60,6 @@ Value importprivkey(const Array& params, bool fHelp)
     key.SetSecret(secret, fCompressed);
     CBitcoinAddress vchAddress = CBitcoinAddress(key.GetPubKey());
 
-    CRITICAL_BLOCK(cs_main)
     CRITICAL_BLOCK(pwalletMain->cs_wallet)
     {
         pwalletMain->MarkDirty();
@@ -69,7 +68,7 @@ Value importprivkey(const Array& params, bool fHelp)
         if (!pwalletMain->AddKey(key))
             throw JSONRPCError(-4,"Error adding key to wallet");
 
-        pwalletMain->ScanForWalletTransactions(pindexGenesisBlock, true);
+        pwalletMain->ScanForWalletTransactions(pblockstore->GetGenesisBlockIndex(), true);
         pwalletMain->ReacceptWalletTransactions();
     }
 

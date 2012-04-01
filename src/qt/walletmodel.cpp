@@ -115,7 +115,6 @@ WalletModel::SendCoinsReturn WalletModel::sendCoins(const QList<SendCoinsRecipie
         return SendCoinsReturn(AmountWithFeeExceedsBalance, nTransactionFee);
     }
 
-    CRITICAL_BLOCK(cs_main)
     CRITICAL_BLOCK(wallet->cs_wallet)
     {
         // Sendmany

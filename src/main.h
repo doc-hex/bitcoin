@@ -6,6 +6,7 @@
 #define BITCOIN_MAIN_H
 
 #include "bignum.h"
+#include "blockstore.h"
 #include "net.h"
 #include "key.h"
 #include "script.h"
@@ -62,14 +63,7 @@ extern CScript COINBASE_FLAGS;
 
 
 extern CCriticalSection cs_main;
-extern std::map<uint256, CBlockIndex*> mapBlockIndex;
 extern uint256 hashGenesisBlock;
-extern CBlockIndex* pindexGenesisBlock;
-extern int nBestHeight;
-extern CBigNum bnBestChainWork;
-extern CBigNum bnBestInvalidWork;
-extern uint256 hashBestChain;
-extern CBlockIndex* pindexBest;
 extern uint64 nPooledTx;
 extern unsigned int nTransactionsUpdated;
 extern uint64 nLastBlockTx;
@@ -78,8 +72,6 @@ extern const std::string strMessageMagic;
 extern double dHashesPerSec;
 extern int64 nHPSTimerStart;
 extern int64 nTimeBestReceived;
-extern CCriticalSection cs_setpwalletRegistered;
-extern std::set<CWallet*> setpwalletRegistered;
 
 // Settings
 extern int64 nTransactionFee;
@@ -92,25 +84,18 @@ class CReserveKey;
 class CTxDB;
 class CTxIndex;
 
-void RegisterWallet(CWallet* pwalletIn);
-void UnregisterWallet(CWallet* pwalletIn);
-bool ProcessBlock(CNode* pfrom, CBlock* pblock);
 bool CheckDiskSpace(uint64 nAdditionalBytes=0);
 FILE* OpenBlockFile(unsigned int nFile, unsigned int nBlockPos, const char* pszMode="rb");
 FILE* AppendBlockFile(unsigned int& nFileRet);
 bool LoadBlockIndex(bool fAllowNew=true);
 void PrintBlockTree();
-bool ProcessMessages(CNode* pfrom);
-bool SendMessages(CNode* pto, bool fSendTrickle);
 void GenerateBitcoins(bool fGenerate, CWallet* pwallet);
 CBlock* CreateNewBlock(CReserveKey& reservekey);
-void IncrementExtraNonce(CBlock* pblock, CBlockIndex* pindexPrev, unsigned int& nExtraNonce);
+void IncrementExtraNonce(CBlock* pblock, const CBlockIndex* pindexPrev, unsigned int& nExtraNonce);
 void FormatHashBuffers(CBlock* pblock, char* pmidstate, char* pdata, char* phash1);
 bool CheckWork(CBlock* pblock, CWallet& wallet, CReserveKey& reservekey);
 bool CheckProofOfWork(uint256 hash, unsigned int nBits);
 unsigned int ComputeMinWork(unsigned int nBase, int64 nTime);
-int GetNumBlocksOfPeers();
-bool IsInitialBlockDownload();
 std::string GetWarnings(std::string strFor);
 
 
@@ -123,8 +108,6 @@ std::string GetWarnings(std::string strFor);
 
 
 
-
-bool GetWalletFile(CWallet* pwallet, std::string &strWalletFileOut);
 
 /** Position on disk for a particular transaction. */
 class CDiskTxPos
@@ -439,22 +422,7 @@ public:
         return SerializeHash(*this);
     }
 
-    bool IsFinal(int nBlockHeight=0, int64 nBlockTime=0) const
-    {
-        // Time based nLockTime implemented in 0.1.6
-        if (nLockTime == 0)
-            return true;
-        if (nBlockHeight == 0)
-            nBlockHeight = nBestHeight;
-        if (nBlockTime == 0)
-            nBlockTime = GetAdjustedTime();
-        if ((int64)nLockTime < (nLockTime < LOCKTIME_THRESHOLD ? (int64)nBlockHeight : nBlockTime))
-            return true;
-        BOOST_FOREACH(const CTxIn& txin, vin)
-            if (!txin.IsFinal())
-                return false;
-        return true;
-    }
+    bool IsFinal(int nBlockHeight=0, int64 nBlockTime=0) const;
 
     bool IsNewerThan(const CTransaction& old) const
     {
@@ -945,36 +913,7 @@ public:
     }
 
 
-    bool WriteToDisk(unsigned int& nFileRet, unsigned int& nBlockPosRet)
-    {
-        // Open history file to append
-        CAutoFile fileout = AppendBlockFile(nFileRet);
-        if (!fileout)
-            return error("CBlock::WriteToDisk() : AppendBlockFile failed");
-
-        // Write index header
-        unsigned int nSize = fileout.GetSerializeSize(*this);
-        fileout << FLATDATA(pchMessageStart) << nSize;
-
-        // Write block
-        nBlockPosRet = ftell(fileout);
-        if (nBlockPosRet == -1)
-            return error("CBlock::WriteToDisk() : ftell failed");
-        fileout << *this;
-
-        // Flush stdio buffers and commit to disk before returning
-        fflush(fileout);
-        if (!IsInitialBlockDownload() || (nBestHeight+1) % 500 == 0)
-        {
-#ifdef WIN32
-            _commit(_fileno(fileout));
-#else
-            fsync(fileno(fileout));
-#endif
-        }
-
-        return true;
-    }
+    bool WriteToDisk(unsigned int& nFileRet, unsigned int& nBlockPosRet);
 
     bool ReadFromDisk(unsigned int nFile, unsigned int nBlockPos, bool fReadTransactions=true)
     {
@@ -1131,7 +1070,7 @@ public:
 
     bool IsInMainChain() const
     {
-        return (pnext || this == pindexBest);
+        return (pnext || this == pblockstore->GetBestBlockIndex());
     }
 
     bool CheckIndex() const
@@ -1296,9 +1235,9 @@ public:
 
     explicit CBlockLocator(uint256 hashBlock)
     {
-        std::map<uint256, CBlockIndex*>::iterator mi = mapBlockIndex.find(hashBlock);
-        if (mi != mapBlockIndex.end())
-            Set((*mi).second);
+        const CBlockIndex* pblockIndex = pblockstore->GetBlockIndex(hashBlock);
+        if (pblockIndex != NULL)
+            Set(pblockIndex);
     }
 
     CBlockLocator(const std::vector<uint256>& vHaveIn)
@@ -1347,11 +1286,10 @@ public:
         int nStep = 1;
         BOOST_FOREACH(const uint256& hash, vHave)
         {
-            std::map<uint256, CBlockIndex*>::iterator mi = mapBlockIndex.find(hash);
-            if (mi != mapBlockIndex.end())
+            const CBlockIndex* pblockIndex = pblockstore->GetBlockIndex(hash);
+            if (pblockIndex != NULL)
             {
-                CBlockIndex* pindex = (*mi).second;
-                if (pindex->IsInMainChain())
+                if (pblockIndex->IsInMainChain())
                     return nDistance;
             }
             nDistance += nStep;
@@ -1361,20 +1299,19 @@ public:
         return nDistance;
     }
 
-    CBlockIndex* GetBlockIndex()
+    const CBlockIndex* GetBlockIndex()
     {
         // Find the first block the caller has in the main chain
         BOOST_FOREACH(const uint256& hash, vHave)
         {
-            std::map<uint256, CBlockIndex*>::iterator mi = mapBlockIndex.find(hash);
-            if (mi != mapBlockIndex.end())
+            const CBlockIndex* pblockIndex = pblockstore->GetBlockIndex(hash);
+            if (pblockIndex != NULL)
             {
-                CBlockIndex* pindex = (*mi).second;
-                if (pindex->IsInMainChain())
-                    return pindex;
+                if (pblockIndex->IsInMainChain())
+                    return pblockIndex;
             }
         }
-        return pindexGenesisBlock;
+        return pblockstore->GetGenesisBlockIndex();
     }
 
     uint256 GetBlockHash()
@@ -1382,11 +1319,10 @@ public:
         // Find the first block the caller has in the main chain
         BOOST_FOREACH(const uint256& hash, vHave)
         {
-            std::map<uint256, CBlockIndex*>::iterator mi = mapBlockIndex.find(hash);
-            if (mi != mapBlockIndex.end())
+            const CBlockIndex* pblockIndex = pblockstore->GetBlockIndex(hash);
+            if (pblockIndex != NULL)
             {
-                CBlockIndex* pindex = (*mi).second;
-                if (pindex->IsInMainChain())
+                if (pblockIndex->IsInMainChain())
                     return hash;
             }
         }
@@ -1395,7 +1331,7 @@ public:
 
     int GetHeight()
     {
-        CBlockIndex* pindex = GetBlockIndex();
+        const CBlockIndex* pindex = GetBlockIndex();
         if (!pindex)
             return 0;
         return pindex->nHeight;
@@ -1607,8 +1543,6 @@ public:
         sMsg >> *(CUnsignedAlert*)this;
         return true;
     }
-
-    bool ProcessAlert();
 };
 
 #endif

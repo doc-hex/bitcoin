@@ -58,7 +58,9 @@ OBJS= \
     obj/script.o \
     obj/util.o \
     obj/wallet.o \
-    obj/noui.o
+    obj/noui.o \
+    obj/blockstore.o
+>>>>>>> 3375522... Change Bitcoin's flow to use a CBlockStore class
 
 
 all: bitcoind.exe
