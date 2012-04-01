@@ -1679,8 +1679,7 @@ bool CBlockStore::EmitBlock(CBlock& block)
 
         printf("CBlockStore::EmitBlock: ACCEPTED\n");
 
-        CRITICAL_BLOCK(cs_callbacks)
-            queueCommitBlockCallbacks.push(new CBlock(block));
+        SubmitCallbackCommitBlock(block);
     }
 
     return true;
@@ -2670,8 +2669,7 @@ bool CBlockStore::EmitTransaction(CTransaction& transaction, bool fCheckInputs)
 
         if (transaction.AcceptToMemoryPool(ptxdb, fCheckInputs, &fMissingInputs))
         {
-            CRITICAL_BLOCK(cs_callbacks)
-                queueCommitTransactionToMemoryPoolCallbacks.push(new CTransaction(transaction));
+            SubmitCallbackCommitTransactionToMemoryPool(transaction);
 
             vWorkQueue.push_back(transaction.GetHash());
 
@@ -2689,8 +2687,7 @@ bool CBlockStore::EmitTransaction(CTransaction& transaction, bool fCheckInputs)
                     if (tx.AcceptToMemoryPool(true))
                     {
                         printf("   accepted orphan tx %s\n", hash.ToString().substr(0,10).c_str());
-                        CRITICAL_BLOCK(cs_callbacks)
-                            queueCommitTransactionToMemoryPoolCallbacks.push(new CTransaction(tx));
+                        SubmitCallbackCommitTransactionToMemoryPool(tx);
                         vWorkQueue.push_back(hash);
                     }
                 }
