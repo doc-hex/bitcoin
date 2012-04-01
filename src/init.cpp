@@ -226,7 +226,8 @@ bool AppInit2(int argc, char* argv[])
             "  -keypool=<n>     \t  "   + _("Set key pool size to <n> (default: 100)") + "\n" +
             "  -rescan          \t  "   + _("Rescan the block chain for missing wallet transactions") + "\n" +
             "  -checkblocks=<n> \t\t  " + _("How many blocks to check at startup (default: 2500, 0 = all)") + "\n" +
-            "  -checklevel=<n>  \t\t  " + _("How thorough the block verification is (0-6, default: 1)") + "\n";
+            "  -checklevel=<n>  \t\t  " + _("How thorough the block verification is (0-6, default: 1)") + "\n" +
+            "  -recovery        \t\t  " + _("Allow certain errors in the wallet file") + "\n";
 
 #ifdef USE_SSL
         strUsage += string() +

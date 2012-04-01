@@ -71,29 +71,60 @@ bool CCryptoKeyStore::SetCrypted()
 
 bool CCryptoKeyStore::Unlock(const CKeyingMaterial& vMasterKeyIn)
 {
+    bool fRet = false;
+
     CRITICAL_BLOCK(cs_KeyStore)
     {
         if (!SetCrypted())
             return false;
 
+        std::vector<std::vector<unsigned char> > vDelete;
+
         CryptedKeyMap::const_iterator mi = mapCryptedKeys.begin();
+        int nReason = 0;
         for (; mi != mapCryptedKeys.end(); ++mi)
         {
             const std::vector<unsigned char> &vchPubKey = (*mi).second.first;
             const std::vector<unsigned char> &vchCryptedSecret = (*mi).second.second;
-            CSecret vchSecret;
-            if(!DecryptSecret(vMasterKeyIn, vchCryptedSecret, Hash(vchPubKey.begin(), vchPubKey.end()), vchSecret))
-                return false;
-            CKey key;
-            key.SetPubKey(vchPubKey);
-            key.SetSecret(vchSecret);
-            if (key.GetPubKey() == vchPubKey)
-                break;
-            return false;
+            if ((vchPubKey.size() == 33 && (vchPubKey[0] == 0x02 || vchPubKey[0] == 0x03)) ||
+                (vchPubKey.size() == 65 && vchPubKey[0] == 0x04))
+            {
+                CSecret vchSecret;
+                if (DecryptSecret(vMasterKeyIn, vchCryptedSecret, Hash(vchPubKey.begin(), vchPubKey.end()), vchSecret))
+                {
+                    if (vchSecret.size() == 32)
+                    {
+                        CKey key;
+                        key.SetPubKey(vchPubKey);
+                        key.SetSecret(vchSecret);
+                        if (key.GetPubKey() == vchPubKey)
+                        {
+                            fRet = true;
+                            if (GetBoolArg("-recovery", false))
+                            {
+                                printf("Accepting %s (pub %s, csec %s)\n", HexStr(vchPubKey).c_str(), CBitcoinAddress(vchPubKey).ToString().c_str(), HexStr(vchPubKey).c_str(), HexStr(vchCryptedSecret).c_str());
+                                continue;
+                            }
+                            else
+                                break;
+                        } else nReason=4;
+                    } else nReason=3;
+                } else nReason=2;
+            } else nReason=1;
+            if (GetBoolArg("-recovery", false))
+            {
+                printf("Dropping %s (pub %s, csec %s): error %i\n", CBitcoinAddress(vchPubKey).ToString().c_str(), HexStr(vchPubKey).c_str(), HexStr(vchCryptedSecret).c_str(), nReason);
+                vDelete.push_back(vchPubKey);
+                continue;
+            }
+            return fRet;
         }
         vMasterKey = vMasterKeyIn;
+
+        BOOST_FOREACH(const std::vector<unsigned char> &vchPubKey, vDelete)
+            mapCryptedKeys.erase(vchPubKey);
     }
-    return true;
+    return fRet;
 }
 
 bool CCryptoKeyStore::AddKey(const CKey& key)
