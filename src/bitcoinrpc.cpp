@@ -150,6 +150,14 @@ Object blockToJSON(const CBlock& block, const CBlockIndex* blockindex)
     result.push_back(Pair("nonce", (boost::uint64_t)block.nNonce));
     result.push_back(Pair("bits", HexBits(block.nBits)));
     result.push_back(Pair("difficulty", GetDifficulty(blockindex)));
+
+	// PDG: I need this data so I can peek into the raw copy of the block,
+	// which what I really wanted.
+	if(blockindex) {
+	   result.push_back(Pair("disk_nFile", (uint64_t)blockindex->nFile));
+	   result.push_back(Pair("disk_nBlockPos", (uint64_t)blockindex->nBlockPos));
+	}
+
     Array txhashes;
     BOOST_FOREACH (const CTransaction&tx, block.vtx)
         txhashes.push_back(tx.GetHash().GetHex());
@@ -2429,7 +2437,7 @@ void ThreadRPCServer2(void* parg)
         ip::tcp::endpoint peer;
         vnThreadsRunning[THREAD_RPCSERVER]--;
         acceptor.accept(sslStream.lowest_layer(), peer);
-        vnThreadsRunning[4]++;
+        vnThreadsRunning[THREAD_RPCSERVER]++;
         if (fShutdown)
             return;
 
