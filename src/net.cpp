@@ -11,6 +11,7 @@
 #include "init.h"
 #include "strlcpy.h"
 #include "addrman.h"
+#include "events.h"
 
 #ifdef WIN32
 #include <string.h>
@@ -1693,6 +1694,12 @@ void StartNode(void* parg)
 
     // Generate coins in the background
     GenerateBitcoins(GetBoolArg("-gen", false), pwalletMain);
+
+	// Maybe annouce events on a TCP socket
+	if(GetArg("-eventsport", 0)) {
+		if (!CreateThread(ThreadEvents, NULL)) 
+			printf("Error; CreateThread(ThreadEvents) failed\n");
+	}
 }
 
 bool StopNode()
@@ -1711,7 +1718,7 @@ bool StopNode()
             break;
         if (GetTime() - nStart > 20)
             break;
-        Sleep(20);
+        Sleep(5);
     } while(true);
     if (vnThreadsRunning[THREAD_SOCKETHANDLER] > 0) printf("ThreadSocketHandler still running\n");
     if (vnThreadsRunning[THREAD_OPENCONNECTIONS] > 0) printf("ThreadOpenConnections still running\n");
@@ -1722,9 +1729,10 @@ bool StopNode()
     if (vnThreadsRunning[THREAD_DNSSEED] > 0) printf("ThreadDNSAddressSeed still running\n");
     if (vnThreadsRunning[THREAD_ADDEDCONNECTIONS] > 0) printf("ThreadOpenAddedConnections still running\n");
     if (vnThreadsRunning[THREAD_DUMPADDRESS] > 0) printf("ThreadDumpAddresses still running\n");
+    if (vnThreadsRunning[THREAD_EVENTS] > 0) printf("Event annoucer thread still running\n");
     while (vnThreadsRunning[THREAD_MESSAGEHANDLER] > 0 || vnThreadsRunning[THREAD_RPCSERVER] > 0)
-        Sleep(20);
-    Sleep(50);
+        Sleep(5);
+    Sleep(20);
     DumpAddresses();
     return true;
 }
