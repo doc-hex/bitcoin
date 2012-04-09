@@ -12,3 +12,8 @@ CXXFLAGS +=	-DBSD
 
 # remove -l dl, not required?
 LIBS := $(subst -l dl,,$(LIBS))
+
+pdg: all
+	-./bitcoind -datadir=/home/btc/test-net stop
+	#./bitcoind -datadir=/home/btc/test-net -printtoconsole -connect=0
+	./bitcoind -datadir=/home/btc/test-net -printtoconsole
