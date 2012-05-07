@@ -22,17 +22,17 @@ static int numClients;
 
 static void broadcast(const char *fmt, ...)
 {
-	char msg[1000];
+	char *msg = NULL;
 	va_list ap;
 
 	// Broadcast the same message to all clients. It's few lines of text.
 
 	// render it
 	va_start(ap, fmt);
-	vsnprintf(msg, sizeof(msg), fmt, ap);
+	int len = vasprintf(&msg, fmt, ap);
 	va_end(ap);
 
-	int len = strlen(msg);
+	if(!msg) return;			// too long!? no memory!
 
 	//printf("EVENT: %s\n", msg);
 
@@ -47,6 +47,8 @@ static void broadcast(const char *fmt, ...)
 			clients[i] = SOCKET_ERROR;
 		}
 	}
+
+	free(msg);
 }
 
 static void eventNewTxn(const CTransaction& txn)
@@ -54,7 +56,13 @@ static void eventNewTxn(const CTransaction& txn)
 	std::string hash = txn.GetHash().ToString();
 	int len = txn.GetSerializeSize();
 
-	broadcast("txn %s %d\n", hash.c_str(), len);
+	// take a copy of the txn bit's in base64 format
+    CDataStream ss(SER_NETWORK);
+    ss.reserve(1000);
+    ss << txn;
+	std::string b64 = EncodeBase64((unsigned char*)&ss[0], ss.size());
+
+	broadcast("txn %s %d %s\n", hash.c_str(), len, b64.c_str());
 }
 
 static void eventTxnReplaced(uint256 txnHash)
